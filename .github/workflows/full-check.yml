@@ -42,9 +42,10 @@ jobs:
           export \
             TZ=America/Los_Angeles \
             ANT_OPTS='-Dfile.encoding=UTF8 -Xmx2g' \
-            GWT_VERSION=HEAD-SNAPSHOT
+            GWT_VERSION=2.11.0
           # Run the ant tasks, disabling watchFileChanges to work around a github actions limitation
-          ant clean test dist doc \
+          ant clean test dist-dev doc \
+            -Dgwt.version=${GWT_VERSION} \
             -Dtest.jvmargs='-ea -Dgwt.watchFileChanges=false' \
             -Dtest.web.htmlunit.disable=true \
             -Dtest.nometa.htmlunit.disable=true \

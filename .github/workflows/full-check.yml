@@ -12,6 +12,7 @@ on:
       - 'main'
       - 'release/*'
       - '*-test'
+      - 'issue-7987-compatibility-with-issue-9584'
 jobs:
   build:
     runs-on: ubuntu-latest

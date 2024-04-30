@@ -4,7 +4,8 @@
 # though maven snapshots are not yet deployed.
 name: Full build
 on:
-  - push:
+  workflow_dispatch
+  push:
     # Build on pushes to main and release branches. For forks, the -test may
     # be helpful to run tests when preparing a merge.
     branches:

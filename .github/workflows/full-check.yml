@@ -32,7 +32,7 @@ jobs:
         # GWT presently requires Java8 to build, but can run on newer Java versions
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'sapmachine'
 
       - name: Build, style/api checks, test, produce docs
@@ -82,7 +82,7 @@ jobs:
         uses: actions/setup-java@v4
         if: github.event_name == 'schedule' && github.repository_owner == 'gwtproject'
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'sapmachine'
           # Define the ID for the server to put in settings.xml, and the env vars that will contain the secrets
           server-id: sonatype-snapshots

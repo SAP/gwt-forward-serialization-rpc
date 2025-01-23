@@ -22,7 +22,7 @@ jobs:
         # GWT presently requires Java8 to build, but can run on newer Java versions
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'sapmachine'
       - name: Set up reviewdog for easier checks on the PR's checkstyle output
         uses: reviewdog/action-setup@v1

@@ -8,13 +8,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout GWT itself into one directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           path: 'gwt'
           # we need depth=2 to see which style violations overlap with the current changes
           fetch-depth: 2
       - name: Checkout GWT tools into a sibling directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
@@ -54,7 +54,7 @@ jobs:
             reviewdog -f=checkstyle -filter-mode=diff_context -reporter=github-pr-review -level=info < $f
           done
       - name: Upload checkstyle xml for manual review
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkstyle-reports

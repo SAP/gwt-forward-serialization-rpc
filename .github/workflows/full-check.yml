@@ -1,7 +1,7 @@
-# Run all tests and builds all aspects of GWT using Java 8. Runs nightly (plus
-# or minus timzeones) on the main branch, and will also run right away on a
-# push to a release branch. Release zips are uploaded as part of the build,
-# though maven snapshots are not yet deployed.
+# Run all tests and builds all aspects of GWT using Java 11, 17, and 21. Runs
+# nightly (plus or minus timzeones) on the main branch, and will also run right
+# away on a push to a release branch. Release zips are uploaded as part of the
+# build, though maven snapshots are not yet deployed.
 name: Full build
 on:
   schedule:
@@ -18,22 +18,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [ '11', '17', '21', '22' ]
     steps:
       - name: Checkout GWT itself into one directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           path: 'gwt'
       - name: Checkout GWT tools into a sibling directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
-      - name: Set up JDK
-        # GWT presently requires Java8 to build, but can run on newer Java versions
+      - name: Set up JDK ${{ matrix.java-version }}
+        # GWT requires Java 11+ to build
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
-          distribution: 'sapmachine'
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
 
       - name: Build, style/api checks, test, produce docs
         run: |
@@ -54,43 +57,43 @@ jobs:
             -Dtest.emma.htmlunit.disable=true
 
       - name: Report test results
-        uses: mikepenz/action-junit-report@v3.1.0
+        uses: mikepenz/action-junit-report@v4.3.1
         if: always()
         with:
           report_paths: 'gwt/build/out/**/test/**/reports/TEST-*.xml'
       - name: Upload checkstyle xml for manual review in its own artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: checkstyle-reports
+          name: checkstyle-reports-java${{ matrix.java-version }}
           path: 'gwt/build/out/**/checkstyle*.xml'
       - name: Upload test xml files for manual review in its own artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: junit-reports
+          name: junit-reports-java${{ matrix.java-version }}
           path: 'gwt/build/out/**/test/**/reports/TEST-*.xml'
 
       - name: On success, upload the release zip
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: gwt
+          name: gwt-java${{ matrix.java-version }}
           path: 'gwt/build/dist/gwt-*.zip'
 
       - name: Set up sonatype credentials
         # Using the same java version as above, set up a settings.xml file
         uses: actions/setup-java@v4
-        if: github.event_name == 'schedule' && github.repository_owner == 'gwtproject'
+        if: ${{ github.event_name == 'schedule' && github.repository_owner == 'gwtproject' && matrix.java-version == '21' }}
         with:
-          java-version: '11'
-          distribution: 'sapmachine'
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
           # Define the ID for the server to put in settings.xml, and the env vars that will contain the secrets
           server-id: sonatype-snapshots
           server-username: SONATYPE_USERNAME
           server-password: SONATYPE_PASSWORD
 
       - name: Nightly builds should be deployed as snapshots to sonatype
-        if: github.event_name == 'schedule' && github.repository_owner == 'gwtproject'
+        if: ${{ github.event_name == 'schedule' && github.repository_owner == 'gwtproject' && matrix.java-version == '21' }}
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}

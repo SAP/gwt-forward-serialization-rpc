@@ -6,6 +6,13 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [ '11', '17', '21' ]
+        java-distribution: [ 'temurin', 'sapmachine' ]
+        include:
+          - java-version: 8
+            java-distribution: temurin
     steps:
       - name: Checkout GWT itself into one directory
         uses: actions/checkout@v2

@@ -35,12 +35,12 @@ jobs:
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
-      - name: Set up JDK 8
+      - name: Set up JDK ${{ matrix.java-version }}
         # GWT presently requires Java8 to build, but can run on newer Java versions
         uses: actions/setup-java@v3
         with:
-          java-version: '8'
-          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+          distribution: ${{ matrix.java-distribution }}
 
       - name: Build, style/api checks, test, produce docs
         run: |
@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: checkstyle-reports
+          name: checkstyle-reports-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/out/**/checkstyle*.xml'
       - name: Upload test xml files for manual review in its own artifact
         uses: actions/upload-artifact@v4
@@ -81,7 +81,7 @@ jobs:
       - name: On success, upload the release zip
         uses: actions/upload-artifact@v4
         with:
-          name: gwt
+          name: gwt-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/dist/gwt-*.zip'
 
       - name: Set up sonatype credentials
@@ -89,8 +89,8 @@ jobs:
         uses: actions/setup-java@v3
         if: github.event_name == 'schedule' && github.repository_owner == 'gwtproject'
         with:
-          java-version: '8'
-          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+          distribution: ${{ matrix.java-distribution }}
           # Define the ID for the server to put in settings.xml, and the env vars that will contain the secrets
           server-id: sonatype-snapshots
           server-username: SONATYPE_USERNAME

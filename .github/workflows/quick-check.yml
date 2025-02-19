@@ -25,12 +25,12 @@ jobs:
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
-      - name: Set up JDK 8
+      - name: Set up JDK ${{ matrix.java-version }}
         # GWT presently requires Java8 to build, but can run on newer Java versions
         uses: actions/setup-java@v2
         with:
-          java-version: '8'
-          distribution: 'temurin'
+          java-version: ${{ matrix.java-version }}
+          distribution: ${{ matrix.java-distribution }}
       - name: Set up reviewdog for easier checks on the PR's checkstyle output
         uses: reviewdog/action-setup@v1
         with:
@@ -64,6 +64,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: checkstyle-reports
+          name: checkstyle-reports-java-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/out/**/checkstyle*.xml'
           retention-days: 5

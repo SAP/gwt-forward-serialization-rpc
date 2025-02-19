@@ -41,6 +41,7 @@ jobs:
         with:
           java-version: ${{ matrix.java-version }}
           distribution: ${{ matrix.java-distribution }}
+          java-package: jdk
 
       - name: Build, style/api checks, test, produce docs
         run: |
@@ -91,6 +92,7 @@ jobs:
         with:
           java-version: ${{ matrix.java-version }}
           distribution: ${{ matrix.java-distribution }}
+          java-package: jdk
           # Define the ID for the server to put in settings.xml, and the env vars that will contain the secrets
           server-id: sonatype-snapshots
           server-username: SONATYPE_USERNAME

@@ -6,6 +6,13 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [ '11', '17', '21' ]
+        java-distribution: [ 'temurin', 'sapmachine' ]
+        include:
+          - java-version: 8
+            java-distribution: temurin
     steps:
       - name: Checkout GWT itself into one directory
         uses: actions/checkout@v2
@@ -54,7 +61,7 @@ jobs:
             reviewdog -f=checkstyle -filter-mode=diff_context -reporter=github-pr-review -level=info < $f
           done
       - name: Upload checkstyle xml for manual review
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkstyle-reports

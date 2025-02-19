@@ -54,7 +54,7 @@ jobs:
             reviewdog -f=checkstyle -filter-mode=diff_context -reporter=github-pr-review -level=info < $f
           done
       - name: Upload checkstyle xml for manual review
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkstyle-reports

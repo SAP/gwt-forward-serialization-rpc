@@ -30,17 +30,17 @@ import com.google.gwt.dev.javac.testing.impl.MockResource;
 import com.google.gwt.dev.jjs.JsOutputOption;
 import com.google.gwt.dev.jjs.impl.JjsUtils;
 import com.google.gwt.dev.util.UnitTestTreeLogger;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.dev.util.log.PrintWriterTreeLogger;
 import com.google.gwt.thirdparty.guava.common.base.Charsets;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableList;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
-import com.google.gwt.thirdparty.guava.common.io.Files;
-import com.google.gwt.util.tools.Utility;
+import com.google.gwt.thirdparty.guava.common.io.MoreFiles;
+
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -943,7 +943,7 @@ public class CompilerTest extends ArgProcessorTestBase {
     SourceLevel[] sourceLevels = SourceLevel.values();
     SourceLevel previousSourceLevel = sourceLevels[0];
     for (int i = 1; i < sourceLevels.length; i++) {
-      assertTrue(Utility.versionCompare(previousSourceLevel.getStringValue(),
+      assertTrue(SourceLevel.versionCompare(previousSourceLevel.getStringValue(),
           sourceLevels[i].getStringValue()) < 0);
       previousSourceLevel = sourceLevels[i];
     }
@@ -957,9 +957,9 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     assertEquals(SourceLevel.JAVA8, SourceLevel.getBestMatchingVersion("1.7"));
     assertEquals(SourceLevel.JAVA8, SourceLevel.getBestMatchingVersion("1.8"));
-    assertEquals(SourceLevel.JAVA9, SourceLevel.getBestMatchingVersion("1.9"));
-    assertEquals(SourceLevel.JAVA10, SourceLevel.getBestMatchingVersion("1.10"));
-    assertEquals(SourceLevel.JAVA11, SourceLevel.getBestMatchingVersion("1.11"));
+    assertEquals(SourceLevel.JAVA9, SourceLevel.getBestMatchingVersion("9"));
+    assertEquals(SourceLevel.JAVA10, SourceLevel.getBestMatchingVersion("10"));
+    assertEquals(SourceLevel.JAVA11, SourceLevel.getBestMatchingVersion("11"));
 
     // not proper version strings => default to JAVA8.
     assertEquals(SourceLevel.JAVA8, SourceLevel.getBestMatchingVersion("1.6u3"));
@@ -976,7 +976,7 @@ public class CompilerTest extends ArgProcessorTestBase {
    */
   public void testGwtCreateJsTypeRebindResult() throws Exception {
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
-    compileToJs(compilerOptions, Files.createTempDir(), "com.foo.SimpleModule",
+    compileToJs(compilerOptions, createTempDir(), "com.foo.SimpleModule",
         Lists.newArrayList(simpleModuleResource, gwtCreateEntryPointResource),
         new MinimalRebuildCache(), emptySet, JsOutputOption.OBFUSCATED);
   }
@@ -1032,7 +1032,7 @@ public class CompilerTest extends ArgProcessorTestBase {
             "</module>");
 
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
-    String js = compileToJs(compilerOptions, Files.createTempDir(), testEntryPoint.getTypeName(),
+    String js = compileToJs(compilerOptions, createTempDir(), testEntryPoint.getTypeName(),
         Lists.newArrayList(moduleResource, testEntryPoint, someJsFunction,
             jsFunctionInterfaceImplementation, someInterface),
         new MinimalRebuildCache(), emptySet, JsOutputOption.DETAILED);
@@ -1340,7 +1340,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
   public void testJsInteropNameCollision() throws Exception {
     MinimalRebuildCache minimalRebuildCache = new MinimalRebuildCache();
-    File applicationDir = Files.createTempDir();
+    File applicationDir = Files.createTempDirectory("JsInteropNameCollision").toFile();
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
     compilerOptions.setGenerateJsInteropExports(true);
 
@@ -1368,7 +1368,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
   public void testGwtCreateJsoRebindResult() throws Exception {
     try {
-      compileToJs(Files.createTempDir(), "com.foo.SimpleModule",
+      compileToJs(createTempDir(), "com.foo.SimpleModule",
           Lists.newArrayList(simpleModuleResource, brokenGwtCreateEntryPointResource),
           new MinimalRebuildCache(), emptySet, JsOutputOption.OBFUSCATED);
       fail("Compile should have failed");
@@ -1399,7 +1399,7 @@ public class CompilerTest extends ArgProcessorTestBase {
             "}");
 
     MinimalRebuildCache minimalRebuildCache = new MinimalRebuildCache();
-    File applicationDir = Files.createTempDir();
+    File applicationDir = createTempDir();
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
 
     UnitTestTreeLogger.Builder builder = new UnitTestTreeLogger.Builder();
@@ -1546,7 +1546,7 @@ public class CompilerTest extends ArgProcessorTestBase {
             "</module>");
 
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
 
     // Perform a first compile.
     compileToJs(relinkApplicationDir, "com.foo.TestModule",
@@ -1565,7 +1565,7 @@ public class CompilerTest extends ArgProcessorTestBase {
   public void testIncrementalRecompile_invalidatePreamble() throws UnableToCompleteException,
       IOException, InterruptedException {
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
 
     // Perform a first compile.
     compileToJs(relinkApplicationDir, "com.foo.SimpleModule",
@@ -1593,7 +1593,7 @@ public class CompilerTest extends ArgProcessorTestBase {
   public void testIncrementalRecompile_bridgeMethodOverrideChain()
       throws UnableToCompleteException, IOException, InterruptedException {
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
 
     // Perform a first compile.
     compileToJs(relinkApplicationDir, "com.foo.SimpleModule", Lists.newArrayList(
@@ -1699,7 +1699,7 @@ public class CompilerTest extends ArgProcessorTestBase {
             "}");
 
     MinimalRebuildCache minimalRebuildCache = new MinimalRebuildCache();
-    File applicationDir = Files.createTempDir();
+    File applicationDir = createTempDir();
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
     compilerOptions.setUseDetailedTypeIds(true);
     compilerOptions.setSourceLevel(SourceLevel.JAVA11);
@@ -1762,7 +1762,7 @@ public class CompilerTest extends ArgProcessorTestBase {
     logger.setMaxDetail(TreeLogger.ERROR);
 
     MinimalRebuildCache minimalRebuildCache = new MinimalRebuildCache();
-    File applicationDir = Files.createTempDir();
+    File applicationDir = createTempDir();
     CompilerOptions compilerOptions = new CompilerOptionsImpl();
     compilerOptions.setUseDetailedTypeIds(true);
     compilerOptions.setSourceLevel(SourceLevel.JAVA11);
@@ -1920,7 +1920,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app with original files, modify a file and do a per-file recompile.
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
     compileToJs(compilerOptions, relinkApplicationDir, "com.foo.SimpleModule", originalResources,
         relinkMinimalRebuildCache, emptySet, output);
 
@@ -1960,7 +1960,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app with original files.
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
     compileToJs(compilerOptions, relinkApplicationDir, "com.foo.SimpleModule", originalResources,
         relinkMinimalRebuildCache, emptySet, output);
 
@@ -2009,7 +2009,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app with original files.
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
     compileToJs(compilerOptions, relinkApplicationDir, "com.foo.SimpleModule", originalResources,
         relinkMinimalRebuildCache, emptySet, output);
 
@@ -2046,7 +2046,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app with original files.
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
     compileToJs(compilerOptions, relinkApplicationDir, "com.foo.Hello",
         originalResources, relinkMinimalRebuildCache, emptySet, output);
   }
@@ -2054,7 +2054,7 @@ public class CompilerTest extends ArgProcessorTestBase {
   private void checkIncrementalRecompile_noop(JsOutputOption output) throws UnableToCompleteException,
       IOException, InterruptedException {
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
 
     String originalJs = compileToJs(relinkApplicationDir, "com.foo.SimpleModule", Lists
         .newArrayList(simpleModuleResource, simpleModelEntryPointResource, simpleModelResource,
@@ -2233,7 +2233,7 @@ public class CompilerTest extends ArgProcessorTestBase {
   private void checkIncrementalRecompile_dateStampChange(JsOutputOption output)
       throws UnableToCompleteException, IOException, InterruptedException {
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
 
     String originalJs = compileToJs(relinkApplicationDir, "com.foo.SimpleModule",
         Lists.newArrayList(simpleModuleResource, simpleModelEntryPointResource, simpleModelResource,
@@ -2490,7 +2490,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
   private void assertCompileSucceeds(CompilerOptions options, String moduleName,
       List<MockResource> applicationResources) throws Exception {
-    File compileWorkDir = Utility.makeTemporaryDirectory(null, moduleName);
+    File compileWorkDir = Files.createTempDirectory(moduleName).toFile();
     final CompilerOptionsImpl compilerOptions = new CompilerOptionsImpl(options);
     PrintWriterTreeLogger logger = new PrintWriterTreeLogger();
     logger.setMaxDetail(TreeLogger.ERROR);
@@ -2499,13 +2499,13 @@ public class CompilerTest extends ArgProcessorTestBase {
         System.setProperty(UnitCacheSingleton.GWT_PERSISTENTUNITCACHE, "false");
     try {
 
-      File applicationDir = Files.createTempDir();
+      File applicationDir = createTempDir();
       Thread.sleep(1001);
       // We might be reusing the same application dir but we want to make sure that the output dir
       // is clean to avoid confusion when returning the output JS.
       File outputDir = new File(applicationDir.getPath() + File.separator + moduleName);
       if (outputDir.exists()) {
-        Util.recursiveDelete(outputDir, true);
+        MoreFiles.deleteDirectoryContents(outputDir.toPath());
       }
 
       // Fake out the resource loader to read resources both from the normal classpath as well as
@@ -2537,7 +2537,7 @@ public class CompilerTest extends ArgProcessorTestBase {
       // Run the compiler once here.
       Compiler.compile(logger, options);
     } finally {
-      Util.recursiveDelete(compileWorkDir, false);
+      MoreFiles.deleteRecursively(compileWorkDir.toPath());
       if (oldPersistentUnitCacheValue == null) {
         System.clearProperty(UnitCacheSingleton.GWT_PERSISTENTUNITCACHE);
       } else {
@@ -2552,8 +2552,8 @@ public class CompilerTest extends ArgProcessorTestBase {
     final CompilerOptionsImpl options = new CompilerOptionsImpl();
     options.setOptimizationLevel(optimizationLevel);
 
-    File firstCompileWorkDir = Utility.makeTemporaryDirectory(null, "hellowork");
-    File secondCompileWorkDir = Utility.makeTemporaryDirectory(null, "hellowork");
+    File firstCompileWorkDir = Files.createTempDirectory("hellowork").toFile();
+    File secondCompileWorkDir = Files.createTempDirectory("hellowork").toFile();
     String oldPersistentUnitCacheValue =
         System.setProperty(UnitCacheSingleton.GWT_PERSISTENTUNITCACHE, "false");
     try {
@@ -2584,8 +2584,8 @@ public class CompilerTest extends ArgProcessorTestBase {
       } else {
         System.setProperty(UnitCacheSingleton.GWT_PERSISTENTUNITCACHE, oldPersistentUnitCacheValue);
       }
-      Util.recursiveDelete(firstCompileWorkDir, false);
-      Util.recursiveDelete(secondCompileWorkDir, false);
+      MoreFiles.deleteRecursively(firstCompileWorkDir.toPath());
+      MoreFiles.deleteRecursively(secondCompileWorkDir.toPath());
     }
   }
 
@@ -2630,7 +2630,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app with original files, modify a file and do a per-file recompile.
     MinimalRebuildCache relinkMinimalRebuildCache = new MinimalRebuildCache();
-    File relinkApplicationDir = Files.createTempDir();
+    File relinkApplicationDir = createTempDir();
     String originalAppFromScratchJs = compileToJs(compilerOptions, relinkApplicationDir, moduleName,
         originalResources, relinkMinimalRebuildCache, emptySet, output);
     String modifiedAppRelinkedJs = compileToJs(compilerOptions, relinkApplicationDir, moduleName,
@@ -2639,7 +2639,7 @@ public class CompilerTest extends ArgProcessorTestBase {
 
     // Compile the app from scratch with the modified file.
     MinimalRebuildCache fromScratchMinimalRebuildCache = new MinimalRebuildCache();
-    File fromScratchApplicationDir = Files.createTempDir();
+    File fromScratchApplicationDir = createTempDir();
     String modifiedAppFromScratchJs = compileToJs(compilerOptions, fromScratchApplicationDir,
         moduleName, modifiedResources, fromScratchMinimalRebuildCache, emptySet, output);
 
@@ -2689,7 +2689,7 @@ public class CompilerTest extends ArgProcessorTestBase {
     // clean to avoid confusion when returning the output JS.
     File outputDir = new File(applicationDir.getPath() + File.separator + moduleName);
     if (outputDir.exists()) {
-      Util.recursiveDelete(outputDir, true);
+      MoreFiles.deleteDirectoryContents(outputDir.toPath());
     }
 
     // Fake out the resource loader to read resources both from the normal classpath as well as this
@@ -2737,7 +2737,11 @@ public class CompilerTest extends ArgProcessorTestBase {
     if (expectedProcessedStaleTypeNames != null) {
       assertEquals(expectedProcessedStaleTypeNames, getStaleTypeNames(minimalRebuildCache));
     }
-    return Files.toString(outputJsFile, Charsets.UTF_8);
+    return Files.readString(outputJsFile.toPath(), Charsets.UTF_8);
+  }
+
+  private static File createTempDir() throws IOException {
+    return Files.createTempDirectory("CompilerTest").toFile();
   }
 
   private Set<String> getStaleTypeNames(MinimalRebuildCache relinkMinimalRebuildCache) {
@@ -2793,6 +2797,6 @@ public class CompilerTest extends ArgProcessorTestBase {
     File resourceFile =
         new File(applicationDir.getAbsolutePath() + File.separator + mockResource.getPath());
     resourceFile.getParentFile().mkdirs();
-    Files.write(mockResource.getContent(), resourceFile, Charsets.UTF_8);
+    Files.write(resourceFile.toPath(), List.of(mockResource.getContent()), Charsets.UTF_8);
   }
 }

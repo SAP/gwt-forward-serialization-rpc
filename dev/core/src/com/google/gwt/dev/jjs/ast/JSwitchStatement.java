@@ -18,34 +18,34 @@ package com.google.gwt.dev.jjs.ast;
 import com.google.gwt.dev.jjs.SourceInfo;
 
 /**
- * Java switch statement.
+ * Wrapper to represent a Java switch expression as a JStatement.
  */
 public class JSwitchStatement extends JStatement {
 
-  private final JBlock body;
-  private JExpression expr;
+  private final JSwitchExpression expr;
 
-  public JSwitchStatement(SourceInfo info, JExpression expr, JBlock body) {
-    super(info);
+  public JSwitchStatement(SourceInfo info, JExpression expr, JBlock block) {
+    this(new JSwitchExpression(info, expr, block, JPrimitiveType.VOID));
+  }
+
+  public JSwitchStatement(JSwitchExpression expr) {
+    super(expr.getSourceInfo());
     this.expr = expr;
-    this.body = body;
   }
 
   public JBlock getBody() {
-    return body;
+    return expr.getBody();
   }
 
   public JExpression getExpr() {
-    return expr;
+    return expr.getExpr();
   }
 
   @Override
   public void traverse(JVisitor visitor, Context ctx) {
     if (visitor.visit(this, ctx)) {
-      expr = visitor.accept(expr);
-      visitor.accept(body);
+      visitor.accept(expr);
     }
     visitor.endVisit(this, ctx);
   }
-
 }

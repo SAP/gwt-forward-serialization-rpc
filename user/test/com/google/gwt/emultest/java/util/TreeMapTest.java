@@ -16,6 +16,7 @@
 package com.google.gwt.emultest.java.util;
 
 import com.google.gwt.testing.TestUtils;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,6 +42,7 @@ import java.util.TreeMap;
  */
 abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
 
+  @SuppressWarnings("ComparableType")
   private static class ConflictingKey implements Comparable<CharSequence> {
     private final String value;
 
@@ -279,21 +281,28 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
 
   /** Test method for 'java.lang.Object.clone()'. */
   public void testClone() {
-    // Map<K, V> map = createMap();
+    TreeMap<K, V> map = createTreeMap();
     // Check empty clone behavior
-    // TODO (rlo) having .clone() in the code kills the test
-    // SortedMap<K, V> clone = (SortedMap<K, V>)
-    // map.clone();
-    // assertNotNull(clone);
-    // testEquivalent(map, clone);
-    //
-    // // Check non-empty clone behavior
-    // map.put(KEY_1, getValues()[0]);
-    // map.put(KEY_2, getValues()[1]);
-    // map.put(KEY_3, getValues()[2]);
-    // clone = (SortedMap<K, V>) map.clone();
-    // assertNotNull(clone);
-    // testEquivalent(map, clone);
+    SortedMap<K, V> clone = (SortedMap<K, V>) map.clone();
+    assertNotNull(clone);
+    _assertEquals(map, clone);
+    assertSame(map.comparator(), clone.comparator());
+
+    // Check non-empty clone behavior
+    K[] keys = getKeys();
+    V[] values = getValues();
+    map.put(keys[0], values[0]);
+    map.put(keys[1], values[1]);
+    map.put(keys[2], values[2]);
+
+    // Ensure no shared state between original and clone
+    assertFalse(map.equals(clone));
+
+    // Clone the non-empty map
+    clone = (SortedMap<K, V>) map.clone();
+    assertNotNull(clone);
+    _assertEquals(map, clone);
+    assertSame(map.comparator(), clone.comparator());
   }
 
   /**
@@ -488,6 +497,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
    *
    * @see java.util.Map#containsKey(Object)
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testContainsKey_throwsClassCastException() {
     K[] keys = getKeys();
     V[] values = getValues();
@@ -549,6 +559,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
    *
    * @see java.util.Map#containsValue(Object)
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testContainsValue_throwsClassCastException() {
     K[] keys = getKeys();
     V[] values = getValues();
@@ -759,6 +770,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
     }
   }
 
+  @SuppressWarnings("ReturnValueIgnored")
   public void testEntrySet() {
     K[] keys = getSortedKeys();
     V[] values = getSortedValues();
@@ -2155,6 +2167,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
    *
    * @see java.util.Map#put(Object, Object)
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testPut_nullKey() {
     K[] keys = getSortedKeys();
     V[] values = getSortedValues();
@@ -2874,6 +2887,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
     assertTrue(subMap.values().isEmpty());
   }
 
+  @SuppressWarnings("ReturnValueIgnored")
   public void testSubMap_entrySet() {
     K[] keys = getSortedKeys();
     V[] values = getSortedValues();
@@ -3311,6 +3325,7 @@ abstract class TreeMapTest<K extends Comparable<K>, V> extends TestMap {
    *
    * @see java.util.Map#values()
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testValues() {
     K[] keys = getSortedKeys();
     V[] values = getSortedValues();

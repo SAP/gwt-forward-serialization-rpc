@@ -86,6 +86,7 @@ import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JReturnStatement;
 import com.google.gwt.dev.jjs.ast.JRunAsync;
 import com.google.gwt.dev.jjs.ast.JStatement;
+import com.google.gwt.dev.jjs.ast.JSwitchExpression;
 import com.google.gwt.dev.jjs.ast.JSwitchStatement;
 import com.google.gwt.dev.jjs.ast.JThisRef;
 import com.google.gwt.dev.jjs.ast.JThrowStatement;
@@ -97,6 +98,7 @@ import com.google.gwt.dev.jjs.ast.JUnsafeTypeCoercion;
 import com.google.gwt.dev.jjs.ast.JVariable;
 import com.google.gwt.dev.jjs.ast.JVisitor;
 import com.google.gwt.dev.jjs.ast.JWhileStatement;
+import com.google.gwt.dev.jjs.ast.JYieldStatement;
 import com.google.gwt.dev.jjs.ast.RuntimeConstants;
 import com.google.gwt.dev.jjs.ast.js.JDebuggerStatement;
 import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
@@ -591,11 +593,12 @@ public class GenerateJavaScriptAST {
 
     @Override
     public JsNode transformCaseStatement(JCaseStatement caseStatement) {
-      if (caseStatement.getExpr() == null) {
+      if (caseStatement.isDefault()) {
         return new JsDefault(caseStatement.getSourceInfo());
       } else {
+        assert caseStatement.getExprs().size() == 1 : "case must be normalized " + caseStatement;
         JsCase jsCase = new JsCase(caseStatement.getSourceInfo());
-        jsCase.setCaseExpr(transform(caseStatement.getExpr()));
+        jsCase.setCaseExpr(transform(caseStatement.getExprs().get(0)));
         return jsCase;
       }
     }
@@ -1684,6 +1687,50 @@ public class GenerateJavaScriptAST {
     }
 
     @Override
+    public JsNode transformSwitchExpression(JSwitchExpression x) {
+      SourceInfo info = x.getSourceInfo();
+      // Any remaining switch expression that couldn't be rewritten to a switch statement must be
+      // wrapped in a JsFunction, with yields replaced by returns. The function is invoked with
+      // Function.prototype.call, so that "this" is correctly applied to the contents of the
+      // function, and to avoid making the function appear in the local scope (avoiding the need
+      // for a name for the function, and thus allowing more than one switch, or nested switches,
+      // etc). That is,
+      //
+      // foo(switch(bar) {
+      //   case 123 -> "abc"
+      // });
+      //
+      // would be written as
+      //
+      // foo((function() {
+      //   switch(bar) {
+      //     case 123:
+      //       return "abc";
+      //   }
+      // }).call(this));
+      //
+
+      // We need a scope for the wrapper - we're just going to use the enclosing method for that,
+      // since all java locals are declared at the top level any way. This prevents us from needing
+      // to maintain a stack of nested JsFunctions (in case of nested switch expressions), and
+      // potentially lets the compiler reuse locals.
+      JsScope scope = getJsFunctionFor(currentMethod).getScope();
+
+      JsFunction fnWrapper = new JsFunction(info, scope);
+
+      // Write out the switch expression as if it was a statement - every case must have returns
+      // already built in
+      JsStatement switchStatement = transformSwitchStatement(new JSwitchStatement(x));
+
+      fnWrapper.setBody(new JsBlock(info));
+      fnWrapper.getBody().getStatements().add(switchStatement);
+
+      JsNameRef call = new JsNameRef(info, "call", fnWrapper);
+
+      return new JsInvocation(info, call, new JsThisRef(info));
+    }
+
+    @Override
     public JsStatement transformSwitchStatement(JSwitchStatement switchStatement) {
       /*
        * What a pain.. JSwitchStatement and JsSwitch are modeled completely
@@ -1906,10 +1953,10 @@ public class GenerateJavaScriptAST {
      * source loading and runs in the global scope (not inside of any function scope).
      */
     private void setupGwtOnLoad() {
-      /**
+      /*
        * <pre>
-       * var $entry = Impl.registerEntry();
-       * var gwtOnLoad = ModuleUtils.gwtOnLoad();
+       * var $entry = ModuleUtils.registerEntry();
+       * var gwtOnLoad = ModuleUtils.gwtOnLoad;
        * ModuleUtils.addInitFunctions(init1, init2,...)
        * </pre>
        */
@@ -1924,8 +1971,8 @@ public class GenerateJavaScriptAST {
       // var gwtOnLoad = ModuleUtils.gwtOnLoad;
       JsName gwtOnLoad = topScope.findExistingUnobfuscatableName("gwtOnLoad");
       JsVar varGwtOnLoad = new JsVar(sourceInfo, gwtOnLoad);
-      varGwtOnLoad.setInitExpr(createAssignment(gwtOnLoad.makeRef(sourceInfo),
-          getIndexedMethodJsName(RuntimeConstants.MODULE_UTILS_GWT_ON_LOAD).makeRef(sourceInfo)));
+      varGwtOnLoad.setInitExpr(
+          getIndexedMethodJsName(RuntimeConstants.MODULE_UTILS_GWT_ON_LOAD).makeRef(sourceInfo));
       getGlobalStatements().add(new JsVars(sourceInfo, varGwtOnLoad));
 
       // ModuleUtils.addInitFunctions(init1, init2,...)
@@ -2351,8 +2398,7 @@ public class GenerateJavaScriptAST {
     }
 
     private JsExprStmt outputDisplayName(JsNameRef function, JMethod method) {
-      JsNameRef displayName = new JsNameRef(function.getSourceInfo(), "displayName");
-      displayName.setQualifier(function);
+      JsNameRef displayName = new JsNameRef(function.getSourceInfo(), "displayName", function);
       String displayStringName = getDisplayName(method);
       JsStringLiteral displayMethodName =
           new JsStringLiteral(function.getSourceInfo(), displayStringName);
@@ -2602,6 +2648,11 @@ public class GenerateJavaScriptAST {
      */
     private <T extends JsExpression> T transform(JExpression expression) {
       return transform((JNode) expression);
+    }
+
+    @Override
+    public JsNode transformYieldStatement(JYieldStatement x) {
+      return new JsReturn(x.getSourceInfo(), transform(x.getExpr()));
     }
 
     private <T extends JsStatement> T transform(JStatement statement) {
@@ -3133,7 +3184,19 @@ public class GenerateJavaScriptAST {
     return names.get(program.getIndexedField(indexedName));
   }
 
-  private static JsNameRef createGlobalQualifier(String qualifier, SourceInfo sourceInfo) {
-     return JsUtils.createQualifiedNameRef(JsInteropUtil.normalizeQualifier(qualifier), sourceInfo);
+  private JsNameRef createGlobalQualifier(String qualifier, SourceInfo sourceInfo) {
+    List<String> parts =
+        Lists.newArrayList(JsInteropUtil.normalizeQualifier(qualifier).split("\\."));
+    // Make the top level name unobfuscatable in the top scope, and remove from parts.
+    String topScopeName = parts.remove(0);
+    JsNameRef ref =
+        jsProgram.getScope().declareUnobfuscatableName(topScopeName).makeRef(sourceInfo);
+
+    for (String part : parts) {
+      // The rest can be left as a name ref to be resolved by JsSymbolResolver later.
+      ref = new JsNameRef(sourceInfo, part, ref);
+    }
+
+    return ref;
   }
 }

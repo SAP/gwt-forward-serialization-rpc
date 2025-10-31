@@ -2,7 +2,7 @@
 
   [![latest release](https://img.shields.io/github/v/release/gwtproject/gwt)](https://github.com/gwtproject/gwt/releases)
   [![nightly](https://github.com/gwtproject/gwt/actions/workflows/full-check.yml/badge.svg)](https://github.com/gwtproject/gwt/actions/workflows/full-check.yml)
-  [![gitter](https://img.shields.io/badge/gitter.im-Join%20Chat-green.svg)](https://gitter.im/gwtproject/gwt/)
+  [![gitter](https://img.shields.io/badge/gitter.im-Join%20Chat-green.svg)](https://gitter.im/gwtproject/gwt)
   [![irc](https://img.shields.io/badge/irc:%20chat.freenode.net-%23%23gwt-green.svg)](https://webchat.freenode.net/)
 
   GWT is the official open source project for GWT releases 2.5 and onwards.
@@ -55,10 +55,6 @@ Therefore, this fork allows GWT developers a choice regarding server-side perfor
 
    `$ ant clean dist-dev`
 
-   or if you don't have `python` and `g++` just run
-
-   `$ ant clean dist-dev`
-
    Then you will get all `.jar` files in the folder `build/lib` and
    the redistributable file will be: `build/dist/gwt-0.0.0.zip`
 
@@ -69,6 +65,8 @@ Therefore, this fork allows GWT developers a choice regarding server-side perfor
  - To compile everything including examples you have to run
 
    `$ ant clean dist`
+   
+ - To create maven artifacts (after building .jar using ant), use [following guide](./maven/README.txt).
 
 ### How to verify GWT code conventions:
 

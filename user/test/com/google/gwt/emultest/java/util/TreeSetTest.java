@@ -16,6 +16,7 @@
 package com.google.gwt.emultest.java.util;
 
 import com.google.gwt.testing.TestUtils;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -588,6 +589,7 @@ abstract class TreeSetTest<E extends Comparable<E>> extends TestSet {
    *
    * @see java.util.Set#contains(Object)
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testContains_throwsClassCastException() {
     Set<E> set = createSet();
     set.add(getKeys()[0]);
@@ -678,6 +680,18 @@ abstract class TreeSetTest<E extends Comparable<E>> extends TestSet {
     assertTrue(set0.equals(set1));
     set0.add(getKeys()[1]);
     assertFalse(set0.equals(set1));
+  }
+
+  public void testSetClone() {
+    TreeSet<E> set = createTreeSet();
+    TreeSet<E> clone = (TreeSet<E>) set.clone();
+    assertEquals(set, clone);
+
+    set.add(getKeys()[0]);
+    assertFalse(set.equals(clone));
+
+    clone = (TreeSet<E>) set.clone();
+    assertEquals(set, clone);
   }
 
   /**

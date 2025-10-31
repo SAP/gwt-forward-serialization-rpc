@@ -184,6 +184,7 @@ public class ElementTest extends GWTTestCase {
    * not return a numeric attribute based on the element property. See issue
    * 3238.
    */
+  @SuppressWarnings("ReturnValueIgnored")
   public void testElementAttributeNumeric() {
     DivElement div = Document.get().createDivElement();
     Document.get().getBody().appendChild(div);
@@ -281,17 +282,10 @@ public class ElementTest extends GWTTestCase {
         assertEquals(absLeft, elem.getAbsoluteLeft());
         assertEquals(absTop, elem.getAbsoluteTop());
 
-        if (isIE6or7() && !doc.isCSS1Compat()) {
-          // In IE/quirk, the interior decorations are considered part of the
-          // width/height, so there's no need to account for them here.
-          assertEquals(absLeft + width, elem.getAbsoluteRight());
-          assertEquals(absTop + height, elem.getAbsoluteBottom());
-        } else {
-          assertEquals(absLeft + width + interiorDecorations,
-              elem.getAbsoluteRight());
-          assertEquals(absTop + height + interiorDecorations,
-              elem.getAbsoluteBottom());
-        }
+        assertEquals(absLeft + width + interiorDecorations,
+            elem.getAbsoluteRight());
+        assertEquals(absTop + height + interiorDecorations,
+            elem.getAbsoluteBottom());
       }
     });
   }
@@ -337,12 +331,8 @@ public class ElementTest extends GWTTestCase {
 
     // Ensure that the 'position:fixed' div's absolute position includes the
     // body's scroll position.
-    //
-    // Don't do this on IE6/7, which doesn't support position:fixed.
-    if (!isIE6or7()) {
-      assertTrue(fixedDiv.getAbsoluteLeft() >= body.getScrollLeft());
-      assertTrue(fixedDiv.getAbsoluteTop() >= body.getScrollTop());
-    }
+    assertTrue(fixedDiv.getAbsoluteLeft() >= body.getScrollLeft());
+    assertTrue(fixedDiv.getAbsoluteTop() >= body.getScrollTop());
   }
 
   /**
@@ -749,17 +739,5 @@ public class ElementTest extends GWTTestCase {
 
   private native JavaScriptObject createTrivialJSO() /*-{
     return {};
-  }-*/;
-
-  // Stolen from UserAgentPropertyGenerator
-  private native boolean isIE6or7() /*-{
-    var ua = navigator.userAgent.toLowerCase();
-    if (ua.indexOf("msie") != -1) {
-      if ($doc.documentMode >= 8) {
-        return false;
-      }
-      return true;
-    }
-    return false;
   }-*/;
 }

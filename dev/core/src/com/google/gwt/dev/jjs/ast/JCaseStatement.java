@@ -16,29 +16,60 @@
 package com.google.gwt.dev.jjs.ast;
 
 import com.google.gwt.dev.jjs.SourceInfo;
+import com.google.gwt.thirdparty.guava.common.collect.Lists;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Java case statement.
  */
 public class JCaseStatement extends JStatement {
 
-  private JExpression expr;
+  private final List<JExpression> exprs;
 
   public JCaseStatement(SourceInfo info, JExpression expr) {
     super(info);
-    this.expr = expr;
+    this.exprs = Lists.newArrayList(expr);
   }
 
-  public JExpression getExpr() {
-    return expr;
+  public JCaseStatement(SourceInfo info, Collection<JExpression> exprs) {
+    super(info);
+    this.exprs = Lists.newArrayList(exprs);
+  }
+
+  public boolean isDefault() {
+    return exprs.isEmpty();
+  }
+
+  public List<JExpression> getExprs() {
+    return Collections.unmodifiableList(exprs);
+  }
+
+  public JBinaryOperation convertToCompareExpression(JExpression value) {
+    if (isDefault()) {
+      throw new IllegalStateException("Can't replace a default statement with a comparison");
+    }
+    JBinaryOperation compareOperation = null;
+    for (JExpression expr : getExprs()) {
+      JBinaryOperation caseComparison = new JBinaryOperation(getSourceInfo(),
+              JPrimitiveType.BOOLEAN, JBinaryOperator.EQ, value, expr);
+      if (compareOperation == null) {
+        compareOperation = caseComparison;
+      } else {
+        compareOperation = new JBinaryOperation(getSourceInfo(), JPrimitiveType.BOOLEAN,
+                JBinaryOperator.OR, compareOperation, caseComparison);
+      }
+    }
+    assert compareOperation != null : this;
+    return compareOperation;
   }
 
   @Override
   public void traverse(JVisitor visitor, Context ctx) {
     if (visitor.visit(this, ctx)) {
-      if (expr != null) {
-        expr = visitor.accept(expr);
-      }
+      visitor.accept(exprs);
     }
     visitor.endVisit(this, ctx);
   }

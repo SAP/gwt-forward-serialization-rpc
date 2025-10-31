@@ -21,7 +21,6 @@ import com.google.gwt.user.client.rpc.SerializationException;
 import com.google.gwt.user.client.rpc.SerializedTypeViolationException;
 import com.google.gwt.user.client.rpc.impl.AbstractSerializationStreamReader;
 import com.google.gwt.user.server.Base64Utils;
-import com.google.gwt.user.server.rpc.RPC;
 import com.google.gwt.user.server.rpc.SerializationPolicy;
 import com.google.gwt.user.server.rpc.SerializationPolicyProvider;
 import com.google.gwt.user.server.rpc.ServerCustomFieldSerializer;
@@ -56,7 +55,6 @@ public final class ServerSerializationStreamReader extends AbstractSerialization
    * A basic sanity check for strong names. Only allow certain characters to protect serialization
    * policy providers that use it blindly to load files. (This is normally a hex string, but we
    * allow a few more safe characters in case it's useful for testing.)
-   * @see com.google.gwt.dev.util.Util#computeStrongName
    */
   private static final Pattern ALLOWED_STRONG_NAME = Pattern.compile("[a-zA-Z0-9_]+");
 
@@ -367,7 +365,7 @@ public final class ServerSerializationStreamReader extends AbstractSerialization
 
   private final ClassLoader classLoader;
 
-  private SerializationPolicy serializationPolicy = RPC.getDefaultSerializationPolicy();
+  private SerializationPolicy serializationPolicy = LegacySerializationPolicy.getInstance();
 
   private final SerializationPolicyProvider serializationPolicyProvider;
 

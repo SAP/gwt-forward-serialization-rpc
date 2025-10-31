@@ -57,8 +57,34 @@ public class EmulTestBase extends GWTTestCase {
         Arrays.equals(expected, actual));
   }
 
+  public static void assertNPE(String methodName, Runnable runnable) {
+    try {
+      runnable.run();
+      fail("Expected NPE from calling " + methodName);
+    } catch (NullPointerException ignored) {
+      // expected
+    }
+  }
+
+  public static void assertIAE(String methodName, Runnable runnable) {
+    try {
+      runnable.run();
+      fail("Expected IAE from calling " + methodName);
+    } catch (IllegalArgumentException ignored) {
+      // expected
+    }
+  }
+
   @Override
   public String getModuleName() {
     return "com.google.gwt.emultest.EmulSuite";
+  }
+
+  protected <T> T hideFromCompiler(T value) {
+    if (Math.random() < -1) {
+      // Can never happen, but fools the compiler enough not to optimize this call.
+      fail();
+    }
+    return value;
   }
 }

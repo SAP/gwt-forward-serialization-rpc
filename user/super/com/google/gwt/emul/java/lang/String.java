@@ -16,6 +16,7 @@
 
 package java.lang;
 
+import static javaemul.internal.InternalPreconditions.checkArgument;
 import static javaemul.internal.InternalPreconditions.checkCriticalStringBounds;
 import static javaemul.internal.InternalPreconditions.checkNotNull;
 import static javaemul.internal.InternalPreconditions.checkStringBounds;
@@ -26,8 +27,16 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.StringJoiner;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import javaemul.internal.ArrayHelper;
 import javaemul.internal.Coercions;
 import javaemul.internal.EmulatedCharset;
@@ -482,10 +491,6 @@ public final class String implements Comparable<String>, CharSequence,
     return checkNotNull(this);
   }
 
-  public boolean isEmpty() {
-    return length() == 0;
-  }
-
   public int lastIndexOf(int codePoint) {
     return lastIndexOf(fromCodePoint(codePoint));
   }
@@ -641,10 +646,22 @@ public final class String implements Comparable<String>, CharSequence,
       // subgroup handling
       NativeRegExp.Match matchObj = compiled.exec(trail);
       if (matchObj == null || trail == "" || (count == (maxMatch - 1) && maxMatch > 0)) {
+        // At the end of the string, or we have performed the maximum number of matches,
+        // record the remaining string and break
         out[count] = trail;
         break;
       } else {
         int matchIndex = matchObj.getIndex();
+
+        if (lastTrail == null && matchIndex == 0 && matchObj.asArray()[0].length() == 0) {
+          // As of Java 8, we should discard the first zero-length match if it is the beginning of
+          // the string. Do not increment the count, and do not add to the output array.
+          trail = trail.substring(matchIndex + matchObj.asArray()[0].length(), trail.length());
+          compiled.lastIndex = 0;
+          lastTrail = trail;
+          continue;
+        }
+
         out[count] = trail.substring(0, matchIndex);
         trail = trail.substring(matchIndex + matchObj.asArray()[0].length(), trail.length());
         // Force the compiled pattern to reset internal state
@@ -755,6 +772,220 @@ public final class String implements Comparable<String>, CharSequence,
     return start > 0 || end < length ? substring(start, end) : this;
   }
 
+  public String strip() {
+    int length = length();
+    int start = getLeadingWhitespaceLength();
+    if (start == length) {
+      return "";
+    }
+    return substring(start, length - getTrailingWhitespaceLength());
+  }
+
+  public String stripLeading() {
+    return substring(getLeadingWhitespaceLength());
+  }
+
+  public String stripTrailing() {
+    return substring(0, length() - getTrailingWhitespaceLength());
+  }
+
+  public boolean isBlank() {
+    return length() == getLeadingWhitespaceLength();
+  }
+
+  public Stream<String> lines() {
+    return StreamSupport.stream(new LinesSpliterator(), false);
+  }
+
+  public String repeat(int count) {
+    checkArgument(count >= 0, "count is negative: " + count);
+    return asNativeString().repeat(count);
+  }
+
+  public <R> R transform(Function<? super String,? extends R> f) {
+    return f.apply(this);
+  }
+
+  private int getLeadingWhitespaceLength() {
+    int length = length();
+    for (int i = 0; i < length; i++) {
+      if (!Character.isWhitespace(charAt(i))) {
+        return i;
+      }
+    }
+    return length;
+  }
+
+  private int getTrailingWhitespaceLength() {
+    int length = length();
+    for (int i = length - 1; i >= 0; i--) {
+      if (!Character.isWhitespace(charAt(i))) {
+        return length - 1 - i;
+      }
+    }
+    return length;
+  }
+
+  public String indent(int spaces) {
+    if (isEmpty()) {
+      return "";
+    }
+    Stream<String> indentedLines;
+    if (spaces >= 0) {
+      String spaceString = " ".repeat(spaces);
+      indentedLines = lines().map(line -> spaceString + line);
+    } else {
+      indentedLines = lines().map(
+          line -> line.substring(Math.min(-spaces, line.getLeadingWhitespaceLength())));
+    }
+    return indentedLines.collect(Collectors.joining("\n", "", "\n"));
+  }
+
+  public String stripIndent() {
+    if (isEmpty()) {
+      return "";
+    }
+    List<String> lines = lines().collect(Collectors.toList());
+    int minIndent;
+    char lastChar = charAt(length() - 1);
+    String suffix = "";
+    if (lastChar != '\r' && lastChar != '\n') {
+      minIndent = Integer.MAX_VALUE;
+      for (int i = 0; i < lines.size() - 1; i++) {
+        String line = lines.get(i);
+        int leadingWhitespace = line.getLeadingWhitespaceLength();
+        // only update minIndent if not blank
+        if (leadingWhitespace < line.length()) {
+          minIndent = Math.min(minIndent, leadingWhitespace);
+        }
+      }
+      // the last line affects minIndent even if blank
+      minIndent = Math.min(minIndent, lines.get(lines.size() - 1).getLeadingWhitespaceLength());
+    } else {
+      suffix = "\n";
+      minIndent = 0;
+    }
+    final int outdent = minIndent;
+    return lines.stream().map(line -> {
+          if (line.isBlank()) {
+            return "";
+          }
+          return line.substring(outdent).stripTrailing();
+        })
+        .collect(Collectors.joining("\n", "", suffix));
+  }
+
+  public String translateEscapes() {
+    StringBuilder result = new StringBuilder();
+    int translated = 0;
+    while (translated < length()) {
+      int nextBackslash = indexOf("\\", translated);
+      if (nextBackslash == -1) {
+        result.append(substring(translated));
+        return result.toString();
+      }
+      if (nextBackslash == length() - 1) {
+        throw new IllegalArgumentException();
+      }
+      result.append(substring(translated, nextBackslash));
+      char currentChar = charAt(nextBackslash + 1);
+      translated = nextBackslash + 2;
+      switch (currentChar) {
+        case 'b':
+          result.append('\b');
+          break;
+        case 's':
+          result.append(' ');
+          break;
+        case 't':
+          result.append('\t');
+          break;
+        case 'n':
+          result.append('\n');
+          break;
+        case 'f':
+          result.append('\f');
+          break;
+        case 'r':
+          result.append('\r');
+          break;
+        case '\n':
+          // discard
+          break;
+        case '\r':
+          // discard \r and possibly \n that comes right after
+          if (translated < length() && charAt(translated) == '\n') {
+            translated++;
+          }
+          break;
+        case '"':
+          result.append('"');
+          break;
+        case '\'':
+          result.append('\'');
+          break;
+        case '\\':
+          result.append('\\');
+          break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+          int unicode = currentChar - '0';
+          char nextChar = charAt(translated);
+          while (nextChar >= '0' && nextChar < '8' && unicode < 32) {
+            unicode = (unicode << 3) + (nextChar - '0');
+            translated++;
+            nextChar = translated < length() ? charAt(translated) : 0;
+          }
+          result.append((char) unicode);
+          break;
+        default:
+          throw new IllegalArgumentException();
+      }
+    }
+    return result.toString();
+  }
+
+  private class LinesSpliterator extends Spliterators.AbstractSpliterator<String> {
+    private int nextIndex = 0;
+    private int rPosition = -1;
+    private int nPosition = -1;
+
+    private LinesSpliterator() {
+      super(Long.MAX_VALUE, Spliterator.IMMUTABLE | Spliterator.ORDERED);
+    }
+
+    @Override
+    public boolean tryAdvance(Consumer<? super String> action) {
+      if (isEmpty()) {
+        return false;
+      }
+      if (rPosition < nextIndex) {
+        rPosition = cappedIndexOf('\r');
+      }
+      if (nPosition < nextIndex) {
+        nPosition = cappedIndexOf('\n');
+      }
+      int lineEnd = Math.min(nPosition, rPosition);
+      action.accept(substring(nextIndex, lineEnd));
+      nextIndex = lineEnd + 1;
+      if (nPosition == rPosition + 1) {
+        nextIndex++;
+      }
+      return nextIndex < length();
+    }
+
+    private int cappedIndexOf(char c) {
+      int index = indexOf(c, nextIndex);
+      return index == -1 ? length() : index;
+    }
+  }
+
   @JsType(isNative = true, name = "String", namespace = "<window>")
   private static class NativeString {
     public static native String fromCharCode(char x);
@@ -771,6 +1002,7 @@ public final class String implements Comparable<String>, CharSequence,
     public native String toLocaleUpperCase();
     public native String toLowerCase();
     public native String toUpperCase();
+    public native String repeat(int count);
   }
 
   // CHECKSTYLE_OFF: Utility Methods for unboxed String.

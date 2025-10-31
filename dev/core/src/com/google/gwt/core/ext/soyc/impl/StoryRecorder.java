@@ -26,9 +26,7 @@ import com.google.gwt.dev.jjs.SourceInfo;
 import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.jjs.ast.JField;
 import com.google.gwt.dev.jjs.ast.JMethod;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -144,8 +142,8 @@ public class StoryRecorder {
       membersByCorrelation = null;
       storyCache = null;
 
-      Util.writeUtf8(builder, gzipStream);
-      Utility.close(gzipStream);
+      writeUtf8(builder, gzipStream);
+      gzipStream.close();
 
       logger.log(TreeLogger.INFO, "Done");
     } catch (Throwable e) {
@@ -169,16 +167,13 @@ public class StoryRecorder {
       assert info != null;
 
       // Infer dependency information
-      if (!dependencyScope.isEmpty()) {
-
+      while (!dependencyScope.isEmpty() && !dependencyScope.peek().range.contains(range)) {
         /*
          * Pop frames until we get back to a container, using this as a chance
          * to build up our list of non-overlapping Ranges to report back to the
          * user.
          */
-        while (!dependencyScope.peek().range.contains(range)) {
-          popAndRecord(dependencyScope, fragment);
-        }
+        popAndRecord(dependencyScope, fragment);
       }
 
       // Possibly create and record Members
@@ -271,7 +266,7 @@ public class StoryRecorder {
       builder.append("\"/>\n</story>\n");
     } else {
       builder.append("\">");
-      SizeMapRecorder.escapeXml(jsCode, start, end, false, builder);
+      SizeMapRecorder.escapeXml(jsCode, start, Math.min(end,jsCode.length()), false, builder);
       builder.append("</storyref>\n</story>\n");
     }
   }
@@ -279,7 +274,7 @@ public class StoryRecorder {
   private void flushOutput() throws IOException {
     // Flush output to improve memory locality
     if (builder.length() > MAX_STRING_BUILDER_SIZE) {
-      Util.writeUtf8(builder, gzipStream);
+      writeUtf8(builder, gzipStream);
       builder.setLength(0);
     }
   }
@@ -297,7 +292,7 @@ public class StoryRecorder {
      * Make a new Range for the gap between the popped Range and whatever we
      * last stored.
      */
-    if (lastEnd < toStore.getStart()) {
+    if (lastEnd < toStore.getStart() && !dependencyScope.isEmpty()) {
       Range newRange = new Range(lastEnd, toStore.getStart());
       assert !dependencyScope.isEmpty();
 
@@ -351,7 +346,74 @@ public class StoryRecorder {
       theStory = new StoryImpl(storyCache.get(info), length);
     }
 
-    emitStory(theStory, range);
+    if (range.getStart() < js[curHighestFragment].length()) {
+      emitStory(theStory, range);
+    }
   }
 
+  /**
+   * Writes the contents of a StringBuilder to an OutputStream, encoding
+   * each character using the UTF-* encoding.  Unicode characters between
+   * U+0000 and U+10FFFF are supported.
+   */
+  private static void writeUtf8(StringBuilder builder, OutputStream out)
+      throws IOException {
+    // Rolling our own converter avoids the following:
+    //
+    // o Instantiating the entire builder as a String
+    // o Creating CharEncoders and NIO buffer
+    // o Passing through an OutputStreamWriter
+
+    int buflen = 1024;
+    char[] inBuf = new char[buflen];
+    byte[] outBuf = new byte[4 * buflen];
+
+    int length = builder.length();
+    int start = 0;
+
+    while (start < length) {
+      int end = Math.min(start + buflen, length);
+      builder.getChars(start, end, inBuf, 0);
+
+      int index = 0;
+      int len = end - start;
+      for (int i = 0; i < len; i++) {
+        int c = inBuf[i] & 0xffff;
+        if (c < 0x80) {
+          outBuf[index++] = (byte) c;
+        } else if (c < 0x800) {
+          int y = c >> 8;
+          int x = c & 0xff;
+          outBuf[index++] = (byte) (0xc0 | (y << 2) | (x >> 6)); // 110yyyxx
+          outBuf[index++] = (byte) (0x80 | (x & 0x3f));          // 10xxxxxx
+        } else if (c < 0xD800 || c > 0xDFFF) {
+          int y = (c >> 8) & 0xff;
+          int x = c & 0xff;
+          outBuf[index++] = (byte) (0xe0 | (y >> 4));            // 1110yyyy
+          outBuf[index++] = (byte) (0x80 | ((y << 2) & 0x3c) | (x >> 6)); // 10yyyyxx
+          outBuf[index++] = (byte) (0x80 | (x & 0x3f));          // 10xxxxxx
+        } else {
+          // Ignore if no second character (which is not be legal unicode)
+          if (i + 1 < len) {
+            int hi = c & 0x3ff;
+            int lo = inBuf[i + 1] & 0x3ff;
+
+            int full = 0x10000 + ((hi << 10) | lo);
+            int z = (full >> 16) & 0xff;
+            int y = (full >> 8) & 0xff;
+            int x = full & 0xff;
+
+            outBuf[index++] = (byte) (0xf0 | (z >> 5));
+            outBuf[index++] = (byte) (0x80 | ((z << 4) & 0x30) | (y >> 4));
+            outBuf[index++] = (byte) (0x80 | ((y << 2) & 0x3c) | (x >> 6));
+            outBuf[index++] = (byte) (0x80 | (x & 0x3f));
+
+            i++; // char has been consumed
+          }
+        }
+      }
+      out.write(outBuf, 0, index);
+      start = end;
+    }
+  }
 }

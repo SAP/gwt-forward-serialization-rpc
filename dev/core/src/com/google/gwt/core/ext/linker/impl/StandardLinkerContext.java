@@ -52,7 +52,6 @@ import com.google.gwt.dev.js.ast.JsScope;
 import com.google.gwt.dev.resource.ResourceOracle;
 import com.google.gwt.dev.util.DefaultTextOutput;
 import com.google.gwt.dev.util.OutputFileSet;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -131,6 +130,7 @@ public class StandardLinkerContext extends Linker implements LinkerContext {
   private ResourceOracle publicResourceOracle;
 
   private final SortedSet<SelectionProperty> selectionProperties;
+  private final ModuleDef module;
 
   public StandardLinkerContext(TreeLogger logger, ModuleDef module,
       ResourceOracle publicResourceOracle, JsOutputOption outputOption)
@@ -143,6 +143,7 @@ public class StandardLinkerContext extends Linker implements LinkerContext {
     this.moduleLastModified = module.lastModified();
     this.publicResourceOracle = publicResourceOracle;
     this.outputOption = outputOption;
+    this.module = module;
 
     // Sort the linkers into the order they should actually run.
     linkerClasses = new ArrayList<Class<? extends Linker>>();
@@ -519,10 +520,8 @@ public class StandardLinkerContext extends Linker implements LinkerContext {
           partialPath = partialPath.substring(1);
         }
       }
-      OutputStream artifactStream = null;
-      try {
-        artifactStream = new BufferedOutputStream(out.openForWrite(partialPath,
-            artifact.getLastModified()));
+      try (OutputStream artifactStream = new BufferedOutputStream(
+          out.openForWrite(partialPath, artifact.getLastModified()))) {
         artifact.writeTo(artifactLogger, artifactStream);
       } catch (IOException e) {
         artifactLogger.log(TreeLogger.ERROR,
@@ -531,10 +530,12 @@ public class StandardLinkerContext extends Linker implements LinkerContext {
         if (visibility != Visibility.Private) {
           throw new UnableToCompleteException();
         }
-      } finally {
-        Utility.close(artifactStream);
       }
     }
+  }
+
+  public ModuleDef getModule() {
+    return module;
   }
 
   /**

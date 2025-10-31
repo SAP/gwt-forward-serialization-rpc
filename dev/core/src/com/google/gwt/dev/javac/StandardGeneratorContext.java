@@ -39,14 +39,13 @@ import com.google.gwt.dev.resource.Resource;
 import com.google.gwt.dev.resource.ResourceOracle;
 import com.google.gwt.dev.resource.impl.AbstractResourceOracle;
 import com.google.gwt.dev.util.DiskCache;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.collect.HashSet;
 import com.google.gwt.dev.util.collect.IdentityHashMap;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.thirdparty.guava.common.hash.Hashing;
 import com.google.gwt.thirdparty.guava.common.io.Files;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -55,10 +54,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -150,8 +151,9 @@ public class StandardGeneratorContext implements GeneratorContext {
     @Override
     public void commit(TreeLogger logger) {
       String source = sw.toString();
-      strongHash = Util.computeStrongName(Util.getBytes(source));
-      sourceToken = diskCache.writeString(source);
+      byte[] sourceBytes = source.getBytes(StandardCharsets.UTF_8);
+      strongHash = Hashing.murmur3_128().hashBytes(sourceBytes).toString().toUpperCase(Locale.ROOT);
+      sourceToken = diskCache.writeByteArray(sourceBytes);
       sw = null;
       creationTime = System.currentTimeMillis();
     }
@@ -215,21 +217,19 @@ public class StandardGeneratorContext implements GeneratorContext {
     @Override
     public void commit(TreeLogger logger) {
       super.commit(logger);
-      FileOutputStream fos = null;
-      try {
-        fos = new FileOutputStream(file);
+      try (FileOutputStream fos = new FileOutputStream(file)) {
         diskCache.transferToStream(sourceToken, fos);
       } catch (IOException e) {
         logger.log(TreeLogger.WARN, "Error writing out generated unit at '"
             + file.getAbsolutePath() + "': " + e);
-      } finally {
-        Utility.close(fos);
       }
     }
 
     @Override
     public String optionalFileLocation() {
-      return file.exists() ? Util.stripJarPathPrefix(file.getAbsolutePath()) : null;
+      return file.exists()
+          ? file.getAbsolutePath().replaceAll("^file:jar:[^!]+!/", "")
+          : null;
     }
   }
 

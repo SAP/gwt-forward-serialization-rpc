@@ -7,27 +7,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        java-version: [ '8' ] # '11', '17', '21' ]
+        java-version: [ '11' ] # '17', '21', '22' ]
         java-distribution: [ 'temurin' ] #, 'sapmachine' ]
-        #include:
-        #  - java-version: 8
-        #    java-distribution: temurin
     steps:
       - name: Checkout GWT itself into one directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
         with:
           path: 'gwt'
           # we need depth=2 to see which style violations overlap with the current changes
           fetch-depth: 2
       - name: Checkout GWT tools into a sibling directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
       - name: Set up JDK ${{ matrix.java-version }}
-        # GWT presently requires Java8 to build, but can run on newer Java versions
-        uses: actions/setup-java@v4
+        # GWT presently requires Java 11+ to build
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ matrix.java-version }}
           distribution: ${{ matrix.java-distribution }}
@@ -47,24 +45,25 @@ jobs:
             TZ=America/Los_Angeles \
             ANT_OPTS=-Dfile.encoding=UTF8 \
             ANT_OPTS=-Xmx2g
-          ant clean dist doc checkstyle apicheck
+          ant clean compile.tests dist doc checkstyle apicheck
 
-      - name: Create pull request comments/annotations for checkstyle, even on failure
-        if: always() && github.event_name == 'pull_request'
+      - name: Create pull request comments/annotations for checkstyle from the java 21 build, even on failure
+        if: ${{ always() && github.event_name == 'pull_request' && matrix.java-version == '21' }}
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEWDOG_SKIP_DOGHOUSE: true
         run: |
           set -eux
           shopt -s globstar
           cd gwt
           for f in build/out/**/checkstyle*.xml ; do
             echo $f
-            reviewdog -f=checkstyle -filter-mode=diff_context -reporter=github-pr-review -level=info < $f
+            reviewdog -f=checkstyle -filter-mode=diff_context -reporter=github-pr-annotations -level=info < $f
           done
       - name: Upload checkstyle xml for manual review
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@v5
+        if: ${{ matrix.java-version == '21' }}
         with:
-          name: checkstyle-reports-java-${{ matrix.java-version }}-${{ matrix.java-distribution }}
+          name: checkstyle-reports-java${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/out/**/checkstyle*.xml'
           retention-days: 5

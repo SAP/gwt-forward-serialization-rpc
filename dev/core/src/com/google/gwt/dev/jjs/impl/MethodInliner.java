@@ -37,6 +37,7 @@ import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JReturnStatement;
 import com.google.gwt.dev.jjs.ast.JStatement;
+import com.google.gwt.dev.jjs.ast.JSwitchExpression;
 import com.google.gwt.dev.jjs.ast.JThisRef;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JVisitor;
@@ -71,6 +72,31 @@ public class MethodInliner {
     public boolean visit(JThisRef x, Context ctx) {
       throw new InternalCompilerException("Should not encounter a JThisRef "
           + "within a static method");
+    }
+  }
+
+  /**
+   * Determines if the given expression can be inlined. Any switch expression will fail this check.
+   */
+  private static class CannotBeInlinedVisitor extends JVisitor {
+    private boolean succeed = true;
+    public static boolean check(JExpression expr) {
+      CannotBeInlinedVisitor v = new CannotBeInlinedVisitor();
+      v.accept(expr);
+      return v.succeed;
+    }
+
+    @Override
+    public boolean visit(JStatement x, Context ctx) {
+      // To ensure we didn't miss an important case, throw if we see a statement, as those cannot
+      // be inlined.
+      throw new IllegalStateException("Should never visit statements");
+    }
+
+    @Override
+    public boolean visit(JSwitchExpression x, Context ctx) {
+      succeed = false;
+      return false;
     }
   }
 
@@ -147,6 +173,7 @@ public class MethodInliner {
       if (expressions == null) {
         // If it will never be possible to inline the method, add it to a
         // blacklist
+
         return InlineResult.BLACKLIST;
       }
 
@@ -241,6 +268,9 @@ public class MethodInliner {
           if (initializer == null) {
             continue;
           }
+          if (!CannotBeInlinedVisitor.check(initializer)) {
+            return null;
+          }
           JLocal local = (JLocal) declStatement.getVariableRef().getTarget();
           JExpression clone = new JBinaryOperation(stmt.getSourceInfo(), local.getType(),
               JBinaryOperator.ASG,
@@ -250,12 +280,19 @@ public class MethodInliner {
         } else if (stmt instanceof JExpressionStatement) {
           JExpressionStatement exprStmt = (JExpressionStatement) stmt;
           JExpression expr = exprStmt.getExpr();
+          if (!CannotBeInlinedVisitor.check(expr)) {
+            return null;
+          }
           JExpression clone = cloner.cloneExpression(expr);
           expressions.add(clone);
         } else if (stmt instanceof JReturnStatement) {
           JReturnStatement returnStatement = (JReturnStatement) stmt;
           JExpression expr = returnStatement.getExpr();
+
           if (expr != null) {
+            if (!CannotBeInlinedVisitor.check(expr)) {
+              return null;
+            }
             JExpression clone = cloner.cloneExpression(expr);
             clone = maybeCast(clone, body.getMethod().getType());
             expressions.add(clone);
@@ -386,8 +423,9 @@ public class MethodInliner {
               return InlineResult.DO_NOT_BLACKLIST;
             }
           }
-          // Fall through!
+          // CHECKSTYLE_OFF: Fall through!
         case CORRECT_ORDER:
+          // CHECKSTYLE_ON
         default:
           if (!x.hasSideEffects()) {
             markCallsAsSideEffectFree(bodyAsExpressionList);

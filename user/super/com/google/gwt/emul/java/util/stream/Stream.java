@@ -17,9 +17,11 @@ package java.util.stream;
 
 import static javaemul.internal.InternalPreconditions.checkState;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -28,8 +30,11 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
+import java.util.function.DoubleConsumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
+import java.util.function.LongConsumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
@@ -150,15 +155,32 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
   }
 
   static <T> Stream<T> iterate(T seed, UnaryOperator<T> f) {
+    return iterate(seed, ignore -> true, f);
+  }
+
+  static <T> Stream<T> iterate(T seed, Predicate<? super T> hasNext, UnaryOperator<T> f) {
     AbstractSpliterator<T> spliterator =
         new Spliterators.AbstractSpliterator<T>(
             Long.MAX_VALUE, Spliterator.IMMUTABLE | Spliterator.ORDERED) {
+          private boolean first = true;
           private T next = seed;
+          private boolean terminated = false;
 
           @Override
           public boolean tryAdvance(Consumer<? super T> action) {
+            if (terminated) {
+              return false;
+            }
+            if (!first) {
+              next = f.apply(next);
+            }
+            first = false;
+
+            if (!hasNext.test(next)) {
+              terminated = true;
+              return false;
+            }
             action.accept(next);
-            next = f.apply(next);
             return true;
           }
         };
@@ -175,6 +197,14 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
     return Arrays.stream(values);
   }
 
+  static <T> Stream<T> ofNullable(T t) {
+    if (t == null) {
+      return empty();
+    } else {
+      return of(t);
+    }
+  }
+
   boolean allMatch(Predicate<? super T> predicate);
 
   boolean anyMatch(Predicate<? super T> predicate);
@@ -187,6 +217,43 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
   long count();
 
   Stream<T> distinct();
+
+  default Stream<T> dropWhile(Predicate<? super T> predicate) {
+    Spliterator<T> prev = spliterator();
+    Spliterator<T> spliterator =
+        new Spliterators.AbstractSpliterator<T>(prev.estimateSize(),
+                prev.characteristics() & ~(Spliterator.SIZED | Spliterator.SUBSIZED)) {
+          private boolean drop = true;
+          private boolean found;
+
+          @Override
+          public boolean tryAdvance(Consumer<? super T> action) {
+            found = false;
+            if (drop) {
+              // drop items until we find one that matches
+              while (drop && prev.tryAdvance(item -> {
+                if (!predicate.test(item)) {
+                  drop = false;
+                  found = true;
+                  action.accept(item);
+                }
+              })) {
+                // do nothing, work is done in tryAdvance
+              }
+              // only return true if we accepted at least one item
+              return found;
+            } else {
+              // accept one item, return result
+              return prev.tryAdvance(action);
+            }
+          }
+        };
+    return StreamSupport.stream(spliterator, false);
+  }
+
+  default List<T> toList() {
+    return Collections.unmodifiableList(this.collect(Collectors.toList()));
+  }
 
   Stream<T> filter(Predicate<? super T> predicate);
 
@@ -235,6 +302,67 @@ public interface Stream<T> extends BaseStream<T, Stream<T>> {
   Stream<T> sorted();
 
   Stream<T> sorted(Comparator<? super T> comparator);
+
+  default Stream<T> takeWhile(Predicate<? super T> predicate) {
+    Spliterator<T> original = spliterator();
+    Spliterator<T> spliterator =
+        new Spliterators.AbstractSpliterator<T>(original.estimateSize(),
+                original.characteristics() & ~(Spliterator.SIZED | Spliterator.SUBSIZED)) {
+          private boolean take = true;
+          private boolean found;
+
+          @Override
+          public boolean tryAdvance(Consumer<? super T> action) {
+            found = false;
+            if (!take) {
+              // already failed the check
+              return false;
+            }
+            original.tryAdvance(item -> {
+              if (predicate.test(item)) {
+                found = true;
+                action.accept(item);
+              } else {
+                take = false;
+              }
+            });
+            return found;
+          }
+        };
+    return StreamSupport.stream(spliterator, false);
+  }
+
+  default <R> Stream<R> mapMulti(BiConsumer<T, ? super Consumer<R>> mapper) {
+    return flatMap(element -> {
+      List<R> buffer = new ArrayList<>();
+      mapper.accept(element, (Consumer<R>) buffer::add);
+      return buffer.stream();
+    });
+  }
+
+  default DoubleStream mapMultiToDouble(BiConsumer<? super T, ? super DoubleConsumer> mapper) {
+    return flatMapToDouble(element -> {
+      List<Double> buffer = new ArrayList<>();
+      mapper.accept(element, (DoubleConsumer) buffer::add);
+      return buffer.stream().mapToDouble(n -> n);
+    });
+  }
+
+  default IntStream mapMultiToInt(BiConsumer<? super T, ? super IntConsumer> mapper) {
+    return flatMapToInt(element -> {
+      List<Integer> buffer = new ArrayList<>();
+      mapper.accept(element, (IntConsumer) buffer::add);
+      return buffer.stream().mapToInt(n -> n);
+    });
+  }
+
+  default LongStream mapMultiToLong(BiConsumer<? super T, ? super LongConsumer> mapper) {
+    return flatMapToLong(element -> {
+      List<Long> buffer = new ArrayList<>();
+      mapper.accept(element, (LongConsumer) buffer::add);
+      return buffer.stream().mapToLong(n -> n);
+    });
+  }
 
   Object[] toArray();
 

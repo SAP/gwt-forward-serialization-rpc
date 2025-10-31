@@ -20,15 +20,13 @@ import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.core.ext.typeinfo.NotFoundException;
 import com.google.gwt.dev.javac.Shared;
 import com.google.gwt.dev.resource.Resource;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.dev.util.log.AbstractTreeLogger;
 import com.google.gwt.dev.util.log.PrintWriterTreeLogger;
+import com.google.gwt.thirdparty.apache.ant.types.ZipScanner;
 import com.google.gwt.util.tools.ArgHandlerFlag;
 import com.google.gwt.util.tools.ArgHandlerString;
 import com.google.gwt.util.tools.ToolBase;
-
-import com.google.gwt.thirdparty.apache.ant.types.ZipScanner;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -41,6 +39,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -166,7 +165,7 @@ public class ApiCompatibilityChecker extends ToolBase {
 
     @Override
     public InputStream openContents() {
-      return new ByteArrayInputStream(Util.getBytes(source));
+      return new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override

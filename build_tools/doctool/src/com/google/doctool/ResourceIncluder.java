@@ -15,65 +15,32 @@
  */
 package com.google.doctool;
 
-import com.sun.javadoc.Tag;
-
-import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Utility methods related to including external resources in doc.
  */
 public class ResourceIncluder {
 
-  /**
-   * Copied from {@link com.google.gwt.util.tools.Utility#close(InputStream)}.
-   */
-  public static void close(InputStream is) {
-    try {
-      if (is != null) {
-        is.close();
-      }
-    } catch (IOException e) {
-    }
+  public static String getResourceFromClasspathScrubbedForHTML(String partialPath)
+          throws IOException {
+    String contents;
+    contents = getFileFromClassPath(partialPath);
+    contents = scrubForHtml(contents);
+    return contents;
   }
 
-  public static String getResourceFromClasspathScrubbedForHTML(Tag tag) {
-    String partialPath = tag.text();
-    try {
-      String contents;
-      contents = getFileFromClassPath(partialPath);
-      contents = scrubForHtml(contents);
-      return contents;
-    } catch (IOException e) {
-      System.err.println(tag.position().toString()
-          + ": unable to include resource " + partialPath + " for tag " + tag);
-      System.exit(1);
-      return null;
-    }
-  }
-
-  /**
-   * Copied from
-   * {@link com.google.gwt.util.tools.Utility#getFileFromClassPath(String)}.
-   */
   private static String getFileFromClassPath(String partialPath)
       throws IOException {
-    InputStream in = ResourceIncluder.class.getClassLoader().getResourceAsStream(
-        partialPath);
-    try {
+    try (InputStream in = ResourceIncluder.class.getClassLoader().getResourceAsStream(
+        partialPath)) {
       if (in == null) {
         throw new FileNotFoundException(partialPath);
       }
-      ByteArrayOutputStream os = new ByteArrayOutputStream();
-      int ch;
-      while ((ch = in.read()) != -1) {
-        os.write(ch);
-      }
-      return new String(os.toByteArray(), "UTF-8");
-    } finally {
-      close(in);
+      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
     }
   }
 

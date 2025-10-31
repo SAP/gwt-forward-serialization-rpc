@@ -31,9 +31,7 @@ import com.google.gwt.dev.shell.jetty.JettyLauncher;
 import com.google.gwt.dev.ui.RestartServerCallback;
 import com.google.gwt.dev.ui.RestartServerEvent;
 import com.google.gwt.dev.util.InstalledHelpInfo;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.ArgHandlerDeployDir;
-import com.google.gwt.dev.util.arg.ArgHandlerDeprecatedDisableUpdateCheck;
 import com.google.gwt.dev.util.arg.ArgHandlerExtraDir;
 import com.google.gwt.dev.util.arg.ArgHandlerFilterJsInteropExports;
 import com.google.gwt.dev.util.arg.ArgHandlerGenerateJsInteropExports;
@@ -51,15 +49,16 @@ import com.google.gwt.dev.util.arg.OptionModulePathPrefix;
 import com.google.gwt.dev.util.log.speedtracer.DevModeEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.thirdparty.guava.common.io.MoreFiles;
 import com.google.gwt.util.tools.ArgHandlerFlag;
 import com.google.gwt.util.tools.ArgHandlerString;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.BindException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -246,7 +245,6 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
       registerHandler(new ArgHandlerExtraDir(options));
       registerHandler(new ArgHandlerModulePathPrefix(options));
       registerHandler(new ArgHandlerWorkDirOptional(options));
-      registerHandler(new ArgHandlerDeprecatedDisableUpdateCheck());
       registerHandler(new ArgHandlerMethodNameDisplayMode(options));
       registerHandler(new ArgHandlerSourceLevel(options));
       registerHandler(new ArgHandlerGenerateJsInteropExports(options));
@@ -495,7 +493,13 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
     }
 
     if (tempWorkDir) {
-      Util.recursiveDelete(options.getWorkDir(), false);
+      try {
+        MoreFiles.deleteRecursively(options.getWorkDir().toPath());
+      } catch (IOException e) {
+        getTopLogger().log(TreeLogger.ERROR,
+            "Unable to delete temporary work directory " + options.getWorkDir().getAbsolutePath(),
+            e);
+      }
     }
   }
 
@@ -504,7 +508,7 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
     tempWorkDir = options.getWorkDir() == null;
     if (tempWorkDir) {
       try {
-        options.setWorkDir(Utility.makeTemporaryDirectory(null, "gwtc"));
+        options.setWorkDir(Files.createTempDirectory("gwtc").toFile());
       } catch (IOException e) {
         System.err.println("Unable to create hosted mode work directory");
         e.printStackTrace();

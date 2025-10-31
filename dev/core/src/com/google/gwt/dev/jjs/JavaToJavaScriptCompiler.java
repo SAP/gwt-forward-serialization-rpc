@@ -84,6 +84,7 @@ import com.google.gwt.dev.jjs.impl.HandleCrossFragmentReferences;
 import com.google.gwt.dev.jjs.impl.ImplementCastsAndTypeChecks;
 import com.google.gwt.dev.jjs.impl.ImplementClassLiteralsAsFields;
 import com.google.gwt.dev.jjs.impl.ImplementJsVarargs;
+import com.google.gwt.dev.jjs.impl.ImplementRecordComponents;
 import com.google.gwt.dev.jjs.impl.JavaAstVerifier;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
 import com.google.gwt.dev.jjs.impl.JjsUtils;
@@ -118,6 +119,7 @@ import com.google.gwt.dev.jjs.impl.ResolveRuntimeTypeReferences.TypeOrder;
 import com.google.gwt.dev.jjs.impl.RewriteConstructorCallsForUnboxedTypes;
 import com.google.gwt.dev.jjs.impl.SameParameterValueOptimizer;
 import com.google.gwt.dev.jjs.impl.SourceInfoCorrelator;
+import com.google.gwt.dev.jjs.impl.SplitCaseStatementValues;
 import com.google.gwt.dev.jjs.impl.TypeCoercionNormalizer;
 import com.google.gwt.dev.jjs.impl.TypeReferencesRecorder;
 import com.google.gwt.dev.jjs.impl.TypeTightener;
@@ -170,7 +172,6 @@ import com.google.gwt.dev.util.DefaultTextOutput;
 import com.google.gwt.dev.util.Memory;
 import com.google.gwt.dev.util.Name.SourceName;
 import com.google.gwt.dev.util.Pair;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.OptionOptimize;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
@@ -182,6 +183,8 @@ import com.google.gwt.thirdparty.guava.common.collect.Iterables;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Multimap;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
+import com.google.gwt.thirdparty.guava.common.hash.Hasher;
+import com.google.gwt.thirdparty.guava.common.hash.Hashing;
 
 import org.xml.sax.SAXException;
 
@@ -189,14 +192,17 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -492,6 +498,7 @@ public final class JavaToJavaScriptCompiler {
       LongCastNormalizer.exec(jprogram);
       LongEmulationNormalizer.exec(jprogram);
       TypeCoercionNormalizer.exec(jprogram);
+      SplitCaseStatementValues.exec(jprogram);
 
       if (options.isIncrementalCompileEnabled()) {
         // Per file compilation reuses type JS even as references (like casts) in other files
@@ -575,18 +582,6 @@ public final class JavaToJavaScriptCompiler {
       ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
       int expectedFragmentCount = options.getFragmentCount();
-      // -1 is the default value, we trap 0 just in case (0 is not a legal value in any case)
-      if (expectedFragmentCount <= 0) {
-        // Fragment count not set check fragments merge.
-        int numberOfMerges = options.getFragmentsMerge();
-        if (numberOfMerges > 0) {
-          // + 1 for left over, + 1 for initial gave us the total number
-          // of fragments without splitting.
-          expectedFragmentCount =
-              Math.max(0, jprogram.getRunAsyncs().size() + 2 - numberOfMerges);
-        }
-      }
-
       int minFragmentSize = properties.getConfigurationProperties()
           .getInteger(CodeSplitters.MIN_FRAGMENT_SIZE, 0);
 
@@ -1156,6 +1151,8 @@ public final class JavaToJavaScriptCompiler {
       // Replace calls to native overrides of object methods.
       ReplaceCallsToNativeJavaLangObjectOverrides.exec(jprogram);
 
+      ImplementRecordComponents.exec(jprogram);
+
       FixAssignmentsToUnboxOrCast.exec(jprogram);
       if (options.isEnableAssertions()) {
         AssertionNormalizer.exec(jprogram);
@@ -1201,6 +1198,7 @@ public final class JavaToJavaScriptCompiler {
     }
 
     EntryMethodHolderGenerator entryMethodHolderGenerator = new EntryMethodHolderGenerator();
+    context.setCurrentGenerator(EntryMethodHolderGenerator.class);
     String entryMethodHolderTypeName =
         entryMethodHolderGenerator.generate(logger, context, module.getCanonicalName());
     context.finish(logger);
@@ -1532,19 +1530,23 @@ public final class JavaToJavaScriptCompiler {
     public PermutationResultImpl(String[] jsFragments, Permutation permutation,
         SymbolData[] symbolMap, StatementRanges[] statementRanges) {
       byte[][] bytes = new byte[jsFragments.length][];
+      Hasher h = Hashing.murmur3_128().newHasher();
+      h.putInt(jsFragments.length);
       for (int i = 0; i < jsFragments.length; ++i) {
-        bytes[i] = Util.getBytes(jsFragments[i]);
+        bytes[i] = jsFragments[i].getBytes(StandardCharsets.UTF_8);
+        h.putInt(bytes[i].length);
+        h.putBytes(bytes[i]);
       }
       this.js = bytes;
-      this.jsStrongName = Util.computeStrongName(bytes);
+      this.jsStrongName = h.hash().toString().toUpperCase(Locale.ROOT);
       this.permutation = permutation;
-      try {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        Util.writeObjectToStream(baos, (Object) symbolMap);
-        this.serializedSymbolMap = baos.toByteArray();
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      try (ObjectOutputStream objectStream = new ObjectOutputStream(baos)) {
+        objectStream.writeObject(symbolMap);
       } catch (IOException e) {
         throw new RuntimeException("Should never happen with in-memory stream", e);
       }
+      this.serializedSymbolMap = baos.toByteArray();
       this.statementRanges = statementRanges;
     }
 

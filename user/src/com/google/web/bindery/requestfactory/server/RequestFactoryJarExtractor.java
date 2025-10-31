@@ -17,8 +17,6 @@ package com.google.web.bindery.requestfactory.server;
 
 import com.google.gwt.dev.util.Name;
 import com.google.gwt.dev.util.Name.SourceOrBinaryName;
-import com.google.gwt.dev.util.Util;
-
 import com.google.web.bindery.event.shared.SimpleEventBus;
 import com.google.web.bindery.requestfactory.apt.RfValidator;
 import com.google.web.bindery.requestfactory.apt.ValidationTool;
@@ -99,7 +97,11 @@ import javax.annotation.processing.Processor;
 
 /**
  * Used to extract RequestFactory client jars from {@code gwt-user.jar}.
+ *
+ * @deprecated Will not be deleted from source, but will no longer be included in GWT artifacts, as
+ * this is only intended for use as a build tool.
  */
+@Deprecated
 public class RequestFactoryJarExtractor {
   /*
    * The FooProcessor types are ASM visitors that traverse the bytecode, calling
@@ -352,7 +354,7 @@ public class RequestFactoryJarExtractor {
 
     public AnnotationProcessor(String sourceType, AnnotationVisitor av) {
       // TODO(rluble): should we chain av to super here?
-      super(Opcodes.ASM7);
+      super(Opcodes.ASM9);
       this.sourceType = sourceType;
       this.av = av;
     }
@@ -386,7 +388,7 @@ public class RequestFactoryJarExtractor {
     private String sourceType;
 
     public ClassProcessor(String sourceType, ClassVisitor cv, State state) {
-      super(Opcodes.ASM7, cv);
+      super(Opcodes.ASM9, cv);
       this.sourceType = sourceType;
       this.state = state;
     }
@@ -504,8 +506,9 @@ public class RequestFactoryJarExtractor {
         String sourcePath = getPackagePath(state.originalType) + state.source;
         String destPath = getPackagePath(state.type) + state.source;
         if (sources.add(sourcePath) && loader.exists(sourcePath)) {
-          String contents = Util.readStreamAsString(loader.getResourceAsStream(sourcePath));
-          emitter.emit(destPath, new ByteArrayInputStream(Util.getBytes(contents)));
+          try (InputStream is = loader.getResourceAsStream(sourcePath)) {
+            emitter.emit(destPath, new ByteArrayInputStream(is.readAllBytes()));
+          }
         }
       }
       return null;
@@ -519,7 +522,7 @@ public class RequestFactoryJarExtractor {
 
     public FieldProcessor(String sourceType, FieldVisitor fv) {
       // TODO(rluble): Should we chain fv to super here?
-      super(Opcodes.ASM7);
+      super(Opcodes.ASM9);
       this.sourceType = sourceType;
       this.fv = fv;
     }
@@ -541,7 +544,7 @@ public class RequestFactoryJarExtractor {
     private final String sourceType;
 
     public MethodProcessor(String sourceType, MethodVisitor mv) {
-      super(Opcodes.ASM7, mv);
+      super(Opcodes.ASM9, mv);
       this.sourceType = sourceType;
     }
 
@@ -630,7 +633,7 @@ public class RequestFactoryJarExtractor {
    */
   private class NativeMethodDefanger extends ClassVisitor {
     public NativeMethodDefanger(ClassVisitor cv) {
-      super(Opcodes.ASM7, cv);
+      super(Opcodes.ASM9, cv);
     }
 
     @Override
@@ -806,6 +809,7 @@ public class RequestFactoryJarExtractor {
     SEEDS.put("apt", aptClasses);
     SEEDS.put("client", Collections.unmodifiableList(clientClasses));
     SEEDS.put("server", Collections.unmodifiableList(serverClasses));
+    SEEDS.put("server-jakarta", Collections.unmodifiableList(serverClasses));
 
     Set<Class<?>> all = new LinkedHashSet<Class<?>>();
     for (List<Class<?>> value : SEEDS.values()) {
@@ -842,6 +846,12 @@ public class RequestFactoryJarExtractor {
         System.err.println("  " + target);
       }
       System.exit(1);
+    }
+    if (args.length != 3 || !"used-to-build-gwt".equals(args[2])) {
+      // Test for magic sentinel, warn if not present
+      System.err.println("RequestFactoryJarExtractor is deprecated for removal from build " +
+              "artifacts, if you have a use case that requires it please discuss at " +
+              "https://github.com/gwtproject/gwt/issues/9923.");
     }
     String target = args[0];
     List<Class<?>> seeds = SEEDS.get(target);
@@ -1052,6 +1062,7 @@ public class RequestFactoryJarExtractor {
     assert type.getInternalName().charAt(0) != 'L';
     if (type.getInternalName().startsWith("java/") ||
         type.getInternalName().startsWith("javax/") ||
+        type.getInternalName().startsWith("jakarta/") ||
         type.getInternalName().startsWith("com/google/gson/")) {
       return toReturn;
     }

@@ -25,18 +25,18 @@ import com.google.gwt.core.ext.linker.ArtifactSet;
 import com.google.gwt.core.ext.linker.CompilationResult;
 import com.google.gwt.core.ext.linker.ConfigurationProperty;
 import com.google.gwt.core.ext.linker.EmittedArtifact;
+import com.google.gwt.core.ext.linker.LinkerUtils;
 import com.google.gwt.core.ext.linker.SelectionProperty;
 import com.google.gwt.core.ext.linker.SoftPermutation;
 import com.google.gwt.core.ext.linker.StatementRanges;
 import com.google.gwt.core.linker.SymbolMapsLinker;
-import com.google.gwt.dev.util.Util;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -257,8 +257,9 @@ public abstract class SelectionScriptLinker extends AbstractLinker {
     primary = null;
 
     for (int i = 1; i < js.length; i++) {
-      byte[] bytes = Util.getBytes(generateDeferredFragment(logger, context, i, js[i], artifacts,
-          result));
+      String s = generateDeferredFragment(logger, context, i, js[i], artifacts,
+          result);
+      byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
       toReturn.add(emitBytes(logger, bytes, FRAGMENT_SUBDIR + File.separator
           + result.getStrongName() + File.separator + i + FRAGMENT_EXTENSION));
     }
@@ -323,8 +324,8 @@ public abstract class SelectionScriptLinker extends AbstractLinker {
     String computeScriptBase;
     String processMetas;
     try {
-      computeScriptBase = Utility.getFileFromClassPath(COMPUTE_SCRIPT_BASE_JS);
-      processMetas = Utility.getFileFromClassPath(PROCESS_METAS_JS);
+      computeScriptBase = LinkerUtils.readClasspathFileAsString(COMPUTE_SCRIPT_BASE_JS);
+      processMetas = LinkerUtils.readClasspathFileAsString(PROCESS_METAS_JS);
     } catch (IOException e) {
       logger.log(TreeLogger.ERROR, "Unable to read selection script template",
           e);
@@ -384,7 +385,7 @@ public abstract class SelectionScriptLinker extends AbstractLinker {
         charsPerChunk(context, logger), getScriptChunkSeparator(logger, context), context);
     String primaryFragmentString =
         generatePrimaryFragmentString(logger, context, result, temp, js.length, artifacts);
-    return Util.getBytes(primaryFragmentString);
+    return primaryFragmentString.getBytes(StandardCharsets.UTF_8);
   }
 
   protected String generatePrimaryFragmentString(TreeLogger logger,
@@ -566,7 +567,7 @@ public abstract class SelectionScriptLinker extends AbstractLinker {
       TreeLogger logger) throws UnableToCompleteException {
     StringBuffer buffer;
     try {
-      buffer = new StringBuffer(Utility.getFileFromClassPath(filename));
+      buffer = new StringBuffer(LinkerUtils.readClasspathFileAsString(filename));
     } catch (IOException e) {
       logger.log(TreeLogger.ERROR, "Unable to read file: " + filename, e);
       throw new UnableToCompleteException();

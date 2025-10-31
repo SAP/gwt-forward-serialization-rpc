@@ -167,7 +167,7 @@
         <filelist dir="${project.build}/no-servlet-src/com/google/gwt/user/server/rpc">
           <file name="AbstractRemoteServiceServlet.java"/>
           <file name="AbstractXsrfProtectedServiceServlet.java"/>
-          <file name="LazyGzipCompressingOoutputStream.java"/>
+          <file name="LazyGzipCompressingOutputStream.java"/>
           <file name="RemoteServiceServlet.java"/>
           <file name="RPCServletUtils.java"/>
           <file name="RPC.java"/>

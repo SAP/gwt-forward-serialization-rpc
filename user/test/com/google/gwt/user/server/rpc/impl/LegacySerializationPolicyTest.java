@@ -70,15 +70,12 @@ public class LegacySerializationPolicyTest extends TestCase {
         IncompatibleRemoteServiceException.class);
 
     /*
-     * Make sure that the supertypes of IncompatibleRemoteServiceException,
-     * excluding Object and RuntimeException (for the latter we now have a custom field serializer),
-     * should not be serialized as leaf types but their fields
+     * Make sure that the supretypes of IncompatibleRemoteServiceException,
+     * excluding Object, should not be serialized as leaf types but their fields
      * should be serializable.
      */
     for (Class<?> clazz = IncompatibleRemoteServiceException.class.getSuperclass(); clazz != Object.class; clazz = clazz.getSuperclass()) {
-      if (clazz != RuntimeException.class) {
-        assertNotValidSerialize(serializationPolicy, clazz);
-      }
+      assertNotValidSerialize(serializationPolicy, clazz);
       assertSerializeFields(serializationPolicy, clazz);
     }
   }

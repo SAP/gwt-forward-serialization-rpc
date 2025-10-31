@@ -19,12 +19,13 @@ package com.google.gwt.user.server.rpc;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.zip.GZIPOutputStream;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
@@ -326,56 +327,28 @@ public class RPCServletUtils {
    *
    * @param servletContext servlet context for this response
    * @param response response instance
-   * @param responseContent a string containing the response content
-   * @param gzipResponse if <code>true</code> the response content will be gzip
-   *          encoded before being written into the response
+   * @param clientAcceptsGzipEncoding if <code>true</code> the response content will be gzip
+   *          encoded before being written into the response in case it
+   *          {@link #exceedsUncompressedContentLengthLimit(String) exceeds a certain size limit}
    * @throws IOException if reading, writing, or closing the response's output
    *           stream fails
    */
-  public static void writeResponse(ServletContext servletContext,
-      HttpServletResponse response, String responseContent, boolean gzipResponse)
+  public static Writer createWriterForResponse(ServletContext servletContext,
+      HttpServletResponse response, boolean clientAcceptsGzipEncoding)
       throws IOException {
-
-    byte[] responseBytes = responseContent.getBytes(StandardCharsets.UTF_8);
-    if (gzipResponse) {
-      // Compress the reply and adjust headers.
-      //
-      ByteArrayOutputStream output = null;
-      GZIPOutputStream gzipOutputStream = null;
-      Throwable caught = null;
-      try {
-        output = new ByteArrayOutputStream(responseBytes.length);
-        gzipOutputStream = new GZIPOutputStream(output);
-        gzipOutputStream.write(responseBytes);
-        gzipOutputStream.finish();
-        gzipOutputStream.flush();
-        setGzipEncodingHeader(response);
-        responseBytes = output.toByteArray();
-      } catch (IOException e) {
-        caught = e;
-      } finally {
-        if (null != gzipOutputStream) {
-          gzipOutputStream.close();
-        }
-        if (null != output) {
-          output.close();
-        }
-      }
-
-      if (caught != null) {
-        servletContext.log("Unable to compress response", caught);
-        response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-        return;
-      }
-    }
-
-    // Send the reply.
-    //
-    response.setContentLength(responseBytes.length);
     response.setContentType(CONTENT_TYPE_APPLICATION_JSON_UTF8);
     response.setStatus(HttpServletResponse.SC_OK);
     response.setHeader(CONTENT_DISPOSITION, ATTACHMENT);
-    response.getOutputStream().write(responseBytes);
+    final Writer writer;
+    if (clientAcceptsGzipEncoding) {
+      // Compress the reply and adjust headers if the payload exceeds UNCOMPRESSED_BYTE_SIZE_LIMIT
+      //
+      final LazyGzipCompressingOutputStream lazyCompressingOutputStream = new LazyGzipCompressingOutputStream(response, UNCOMPRESSED_BYTE_SIZE_LIMIT);
+      writer = new OutputStreamWriter(lazyCompressingOutputStream, CHARSET_UTF8);
+    } else {
+      writer = new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8);
+    }
+    return writer;
   }
 
   /**

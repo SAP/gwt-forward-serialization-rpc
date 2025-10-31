@@ -15,6 +15,33 @@
   [Making GWT better](http://gwtproject.org/makinggwtbetter.html)
   section.
 
+### This Fork
+
+This is a fork from https://github.com/gwtproject/gwt that has a branch ``issue-7987-compatibility-with-issue-9584``
+which has an implementation for [GWT Issue 7987](https://github.com/gwtproject/gwt/issues/7987) which the GWT
+team decided not to pull.
+
+The key difference, when used with the ``-Dgwt.rpc.version=9`` system property for a GWT server application,
+is that serialization of GWT RPC responses is done by streaming the return value's serialized representation
+to the HTTP output stream. This way, multiple copies of the serialized response do not need to be allocated
+and kept in memory. The pre-requisite for this was to write the response in its natural serialization order
+when version 9 of the RPC serialization protocol is selected, and not---as is the standard for the current
+upstream main branch---in backward order. The backward order is one of the reasons why the full serialization
+result needs to be kept in memory before sending it into the response stream can commence. Additionally,
+UTF encoding and conversion from a String to a byte array requires additional live copies of the response
+in memory in the upstream version.
+
+[https://github.com/gwtproject/gwt/issues/7987#issuecomment-1256211109](https://github.com/gwtproject/gwt/issues/7987#issuecomment-1256211109)
+shows the memory and runtime benefits of branch ``issue-7987-compatibility-with-issue-9584`` on this fork.
+It comes at the expense of a minor incompatibility in case exceptions are thrown during the serialization
+process, where the upstream standard version, which is still used unless ``-Dgwt.rpc.version=9`` is specified
+with this branch, will send a well-formed error response, and the new version 9 will have to simply abort the
+stream because it already started writing an ``OK`` response. The result, however, is more or less the same,
+namely that the client will not be able to receive a valid return value from the method called, and a general
+issue then seems to exist with the server-side application which was unable to serialize a return value.
+
+Therefore, this fork allows GWT developers a choice regarding server-side performance and memory consumption.
+
 ### Building the GWT SDK:
 
  - In order to build GWT, `java` and `ant` are required in your system.

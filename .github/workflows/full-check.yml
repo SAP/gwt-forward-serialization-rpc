@@ -4,10 +4,6 @@
 # build, though maven snapshots are not yet deployed.
 name: Full build
 on:
-  schedule:
-    # This time is selected to be early in the morning in NA/SA/EU/ME. This
-    # only runs on the default branch.
-    - cron:  '0 6 * * *'
   push:
     # Build on pushes to main and release branches. For forks, the -test may
     # be helpful to run tests when preparing a merge.
@@ -15,12 +11,14 @@ on:
       - 'main'
       - 'release/*'
       - '*-test'
+      - 'issue-7987-compatibility-with-issue-9584'
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java-version: [ '11', '17', '21', '22' ]
+        java-version: [ '11' ] #[ '17', '21', '22' ]
+        java-distribution: [ 'temurin' ] #, 'sapmachine' ]
     steps:
       - name: Checkout GWT itself into one directory
         uses: actions/checkout@v4
@@ -36,7 +34,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
+          distribution: ${{ matrix.java-distribution }}
 
       - name: Build, style/api checks, test, produce docs
         run: |
@@ -48,9 +46,10 @@ jobs:
           export \
             TZ=America/Los_Angeles \
             ANT_OPTS='-Dfile.encoding=UTF8 -Xmx2g' \
-            GWT_VERSION=HEAD-SNAPSHOT
+            GWT_VERSION=2.11.0
           # Run the ant tasks, disabling watchFileChanges to work around a github actions limitation
-          ant clean test dist doc \
+          ant clean test dist-dev doc \
+            -Dgwt.version=${GWT_VERSION} \
             -Dtest.jvmargs='-ea -Dgwt.watchFileChanges=false' \
             -Dtest.web.htmlunit.disable=true \
             -Dtest.nometa.htmlunit.disable=true \
@@ -65,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: checkstyle-reports-java${{ matrix.java-version }}
+          name: checkstyle-reports-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/out/**/checkstyle*.xml'
       - name: Upload test xml files for manual review in its own artifact
         uses: actions/upload-artifact@v4
@@ -74,10 +73,35 @@ jobs:
           name: junit-reports-java${{ matrix.java-version }}
           path: 'gwt/build/out/**/test/**/reports/TEST-*.xml'
 
+      - name: Determine release name
+        run: echo "RELEASE_NAME=$( find gwt/build/dist/ -name 'gwt-*.zip' | sed -e 's/^.*\/gwt-\(.*\)\.zip$/\1/' )" >> "$GITHUB_ENV"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: gwt-${{ env.RELEASE_NAME }}
+          release_name: ${{ env.RELEASE_NAME }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release ZIP
+        id: upload-release-asset-zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: gwt/build/dist/gwt-${{ env.RELEASE_NAME }}.zip
+          asset_name: gwt-${{ env.RELEASE_NAME }}.zip
+          asset_content_type: application/x-zip
+
       - name: On success, upload the release zip
         uses: actions/upload-artifact@v4
         with:
-          name: gwt-java${{ matrix.java-version }}
+          name: gwt-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/dist/gwt-*.zip'
 
       - name: Set up sonatype credentials
@@ -86,7 +110,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' && github.repository_owner == 'gwtproject' && matrix.java-version == '21' }}
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
+          distribution: ${{ matrix.java-distribution }}
           # Define the ID for the server to put in settings.xml, and the env vars that will contain the secrets
           server-id: sonatype-snapshots
           server-username: SONATYPE_USERNAME

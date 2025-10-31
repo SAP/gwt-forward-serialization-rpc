@@ -17,6 +17,7 @@ package com.google.gwt.user.server.rpc.impl;
 
 import com.google.gwt.user.client.rpc.CustomFieldSerializer;
 import com.google.gwt.user.client.rpc.SerializationException;
+import com.google.gwt.user.client.rpc.impl.AbstractSerializationStream;
 import com.google.gwt.user.client.rpc.impl.AbstractSerializationStreamWriter;
 import com.google.gwt.user.server.Base64Utils;
 import com.google.gwt.user.server.rpc.SerializationPolicy;
@@ -24,14 +25,17 @@ import com.google.gwt.user.server.rpc.SerializationPolicy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -44,75 +48,99 @@ public final class ServerSerializationStreamWriter extends
 
   /**
    * Builds a string that evaluates into an array containing the given elements.
-   * This class exists to work around a bug in IE6/7 that limits the size of
-   * array literals.
    */
-  public static class LengthConstrainedArray {
-    public static final int MAXIMUM_ARRAY_LENGTH_DEFAULT = 1 << 15;
-    private static final String POSTLUDE = "])";
-    private static final String PRELUDE = "].concat([";
-
-    private final StringBuffer buffer;
-    private final int maximumArrayLength = Integer.getInteger("gwt.rpc.maxPayloadChunkSize",
-            MAXIMUM_ARRAY_LENGTH_DEFAULT);
-    private int count = 0;
+  private static class TokenEncoder {
+    private final Writer writer;
+    /**
+     * A buffer used for versions before
+     * {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION}
+     * which write the payload tokens in reverse order; {@code null} for versions
+     * that use forward streaming.
+     */
+    private final List<CharSequence> tokensInReverseOrder;
     private boolean needsComma = false;
-    private int total = 0;
-    private boolean javascript = false;
 
-    public LengthConstrainedArray() {
-      buffer = new StringBuffer();
-    }
-
-    public LengthConstrainedArray(int capacityGuess) {
-      buffer = new StringBuffer(capacityGuess);
-    }
-
-    public void addToken(CharSequence token) {
-      total++;
-      if (count++ == maximumArrayLength) {
-        if (total == maximumArrayLength + 1) {
-          buffer.append(PRELUDE);
-          javascript = true;
-        } else {
-          buffer.append("],[");
-        }
-        count = 0;
-        needsComma = false;
-      }
-
-      if (needsComma) {
-        buffer.append(",");
+    public TokenEncoder(int version, Writer writer) {
+      this.writer = writer;
+      if (version < AbstractSerializationStream.SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION) {
+        tokensInReverseOrder = new LinkedList<>();
       } else {
-        needsComma = true;
+        tokensInReverseOrder = null;
       }
+      try {
+        writer.append("[");
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
 
-      buffer.append(token);
+    /**
+     * For versions prior to {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION}
+     * payload tokens are to be written in reverse order and therefore will be buffered in {@link #tokensInReverseOrder}
+     * For versions starting with {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION}
+     * also the payload tokens will be sent straight into the writer instead.
+     */
+    public void addPayloadToken(CharSequence token) {
+      if (tokensInReverseOrder == null) {
+        // append token directly to writer in forward order
+        addTokenToWriter(token);
+      } else {
+        // enqueue token in reverse order buffer for later writing in finish()
+        tokensInReverseOrder.add(0, token);
+      }
+    }
+    
+    /**
+     * Appends a token at the end of the output written
+     */
+    public void addToken(CharSequence token) {
+        // append token directly to writer in forward order
+        addTokenToWriter(token);
+    }
+    
+    private void addTokenToWriter(CharSequence token) {
+      try {
+        if (needsComma) {
+          writer.append(",");
+        } else {
+          needsComma = true;
+        }
+        writer.append(token);
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
     }
 
     public void addEscapedToken(String token) {
-      addToken(escapeString(token, true, this));
+      addToken(escapeString(token, false));
     }
 
     public void addToken(int i) {
       addToken(String.valueOf(i));
     }
 
-    public boolean isJavaScript() {
-      return javascript;
+    public void finishPayload() {
+      if (tokensInReverseOrder != null) {
+        for (final CharSequence payloadToken : tokensInReverseOrder) {
+          addTokenToWriter(payloadToken);
+        }
+      }
     }
 
-    public void setJavaScript(boolean javascript) {
-      this.javascript = javascript;
+    /**
+     * Closes off the JavaScript array in the output
+     */
+    public void finish() {
+      try {
+        writer.append("]");
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
 
     @Override
     public String toString() {
-      if (total > maximumArrayLength) {
-        return "[" + buffer.toString() + POSTLUDE;
-      } else {
-        return "[" + buffer.toString() + "]";
-      }
+      return getClass().getSimpleName() + " [writer=" + writer + ", needsComma=" + needsComma + "]";
     }
   }
 
@@ -394,7 +422,7 @@ public final class ServerSerializationStreamWriter extends
    * than 1.3 that supports unicode strings.
    */
   public static String escapeString(String toEscape) {
-    return escapeString(toEscape, false, null);
+    return escapeString(toEscape, false);
   }
 
   /**
@@ -410,11 +438,10 @@ public final class ServerSerializationStreamWriter extends
    * than 1.3 that supports unicode strings.
    */
   public static String escapeStringSplitNodes(String toEscape) {
-    return escapeString(toEscape, true, null);
+    return escapeString(toEscape, true);
   }
 
-  private static String escapeString(String toEscape, boolean splitNodes,
-      LengthConstrainedArray array) {
+  private static String escapeString(String toEscape, boolean splitNodes) {
     // Since escaped characters will increase the output size, allocate extra room to start.
     int length = toEscape.length();
     int capacityIncrement = Math.max(length, 16);
@@ -445,9 +472,6 @@ public final class ServerSerializationStreamWriter extends
         charVector.add(JS_QUOTE_CHAR);
         charVector.add('+');
         charVector.add(JS_QUOTE_CHAR);
-        if (array != null) {
-          array.setJavaScript(true);
-        }
       }
     }
 
@@ -579,24 +603,17 @@ public final class ServerSerializationStreamWriter extends
 
   private final SerializationPolicy serializationPolicy;
 
-  private ArrayList<String> tokenList = new ArrayList<String>();
+  private final TokenEncoder encoder;
 
-  private int tokenListCharCount;
-
-  public ServerSerializationStreamWriter(SerializationPolicy serializationPolicy) {
-    this.serializationPolicy = serializationPolicy;
-  }
-
-  public ServerSerializationStreamWriter(SerializationPolicy serializationPolicy, int version) {
-    this(serializationPolicy);
+  public ServerSerializationStreamWriter(SerializationPolicy serializationPolicy, int version, Writer writer) {
     setVersion(version);
+    this.serializationPolicy = serializationPolicy;
+    this.encoder = new TokenEncoder(version, writer);
   }
 
   @Override
   public void prepareToWrite() {
     super.prepareToWrite();
-    tokenList.clear();
-    tokenListCharCount = 0;
   }
 
   public void serializeValue(Object value, Class<?> type)
@@ -619,16 +636,18 @@ public final class ServerSerializationStreamWriter extends
    */
   @Override
   public String toString() {
-    // Build a JavaScript string (with escaping, of course).
-    // We take a guess at how big to make to buffer to avoid numerous resizes.
-    //
-    int capacityGuess = 2 * tokenListCharCount + 2 * tokenList.size();
-    LengthConstrainedArray stream = new LengthConstrainedArray(capacityGuess);
-    writePayload(stream);
-    writeStringTable(stream);
-    writeHeader(stream);
-
-    return stream.toString();
+    return getClass().getName() + " for serialization policy " + serializationPolicy;
+  }
+  
+  /**
+   * To be called after all payload has been written with any of the {@code write...} methods.
+   * Appends the string table and header to the output stream.
+   */
+  public void writeStringTableAndHeaderAfterPayloadFinished() throws IOException {
+    encoder.finishPayload();
+    writeStringTable();
+    writeHeader();
+    encoder.finish();
   }
   
   @Override
@@ -660,10 +679,7 @@ public final class ServerSerializationStreamWriter extends
 
   @Override
   protected void append(String token) {
-    tokenList.add(token);
-    if (token != null) {
-      tokenListCharCount += token.length();
-    }
+    encoder.addPayloadToken(token);
   }
 
   @Override
@@ -860,33 +876,18 @@ public final class ServerSerializationStreamWriter extends
     }
   }
 
-  /**
-   * Notice that the field are written in reverse order that the client can just
-   * pop items out of the stream.
-   */
-  private void writeHeader(LengthConstrainedArray stream) {
-    stream.addToken(getFlags());
-    if (stream.isJavaScript() && getVersion() >= SERIALIZATION_STREAM_JSON_VERSION) {
-      // Ensure we are not using the JSON supported version if stream is Javascript instead of JSON
-      stream.addToken(SERIALIZATION_STREAM_JSON_VERSION - 1);
-    } else {
-      stream.addToken(getVersion());
-    }
+  private void writeHeader() throws IOException {
+    encoder.addToken(getFlags());
+    encoder.addToken(getVersion());
   }
 
-  private void writePayload(LengthConstrainedArray stream) {
-    ListIterator<String> tokenIterator = tokenList.listIterator(tokenList.size());
-    while (tokenIterator.hasPrevious()) {
-      stream.addToken(tokenIterator.previous());
-    }
-  }
-
-  private void writeStringTable(LengthConstrainedArray stream) {
-    LengthConstrainedArray tableStream = new LengthConstrainedArray();
+  private void writeStringTable() throws IOException {
+    final StringWriter buffer = new StringWriter();
+    TokenEncoder tableStream = new TokenEncoder(getVersion(), buffer);
     for (String s : getStringTable()) {
       tableStream.addEscapedToken(s);
     }
-    stream.addToken(tableStream.toString());
-    stream.setJavaScript(stream.isJavaScript() || tableStream.isJavaScript());
+    tableStream.finish();
+    encoder.addToken(buffer.toString());
   }
 }

@@ -27,6 +27,8 @@ import com.google.gwt.user.server.rpc.impl.ServerSerializationStreamReader;
 import com.google.gwt.user.server.rpc.impl.ServerSerializationStreamWriter;
 import com.google.gwt.user.server.rpc.impl.TypeNameObfuscator;
 
+import java.io.IOException;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -69,6 +71,28 @@ public final class RPC {
   private static Map<Class<?>, Set<String>> serviceToImplementedInterfacesMap;
 
   private static final HashMap<String, Class<?>> TYPE_NAMES;
+  
+  /**
+   * Starting with RPC protocol versions starting with
+   * {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} the response
+   * is written directly to a {@link TeeWriter} connected to the HTTP response's output stream. To
+   * keep public methods compatible, instead of passing the {@link TeeWriter} as an additional
+   * parameter, the {@link TeeWriter} is set in this {@link ThreadLocal}.
+   * <p>
+   * 
+   * For older protocol versions a {@link StringWriter} is used as the {@link TeeWriter}'s
+   * {@link TeeWriter#getOtherWriter() other writer}, and the payload is serialized in the old
+   * "reverse" token order. The methods returning the payload as a {@link String} in this case
+   * return the {@link StringWriter#toString()} representation of the payload written.
+   * <p>
+   * 
+   * For RPC protocol versions starting with
+   * {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} the
+   * {@link TeeWriter} only uses the additional {@link StringWriter} if the
+   * {@link RemoteServiceServlet#onAfterResponseSerialized(String)} method is overridden because
+   * only then a complete string representation has to be assembled.
+   */
+  private static final ThreadLocal<TeeWriter<StringWriter>> rpcResponseWriter = new ThreadLocal<>();
 
   static {
     PRIMITIVE_WRAPPER_CLASS_TO_PRIMITIVE_CLASS.put(Boolean.class, Boolean.TYPE);
@@ -91,6 +115,32 @@ public final class RPC {
     TYPE_NAMES.put("S", short.class);
 
     serviceToImplementedInterfacesMap = new HashMap<Class<?>, Set<String>>();
+  }
+  
+  public static void setResponseWriter(TeeWriter<StringWriter> writer) {
+    if (rpcResponseWriter.get() != null) {
+      throw new IllegalStateException("The response writer cannot be changed en route");
+    }
+    rpcResponseWriter.set(writer);
+  }
+  
+  public static void unsetResponseWriter() {
+    if (rpcResponseWriter.get() == null) {
+      throw new IllegalStateException("There was no response writer set. It cannot be unset");
+    }
+    rpcResponseWriter.remove();
+  }
+  
+  /**
+   * While in the {@link RemoteServiceServlet#processCall(String)} method, this method can be used
+   * to obtain the writer to which the response is serialized. Depending on factors such as the
+   * protocol version used (prior or after {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION})
+   * and whether or not the {@link RemoteServiceServlet#onAfterResponseSerialized(String)} is overridden,
+   * a {@link StringWriter} may be set as the {@link TeeWriter#getOtherWriter() other writer} of the
+   * {@link TeeWriter} returned.
+   */
+  public static TeeWriter<StringWriter> getResponseWriter() {
+    return rpcResponseWriter.get();
   }
 
   /**
@@ -336,7 +386,9 @@ public final class RPC {
    * </p>
    * @param rpcRequest the RPCRequest that failed to execute, may be null
    * @param cause the {@link Throwable} that was thrown
-   * @return a String that encodes the exception
+   * @return a String that encodes the exception, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * @throws SerializationException if the result cannot be serialized
    */
   public static String encodeResponseForFailedRequest(RPCRequest rpcRequest, Throwable cause)
@@ -358,7 +410,9 @@ public final class RPC {
    * @param serviceMethod the method that threw the exception, may be
    *          <code>null</code>
    * @param cause the {@link Throwable} that was thrown
-   * @return a string that encodes the exception
+   * @return a string that encodes the exception, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws NullPointerException if the cause is <code>null</code>
    * @throws SerializationException if the result cannot be serialized
@@ -387,7 +441,9 @@ public final class RPC {
    *          <code>null</code>
    * @param cause the {@link Throwable} that was thrown
    * @param serializationPolicy determines the serialization policy to be used
-   * @return a string that encodes the exception
+   * @return a string that encodes the exception, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws NullPointerException if the cause or the serializationPolicy
    *           are <code>null</code>
@@ -426,7 +482,9 @@ public final class RPC {
    * @param serviceMethod the method whose result we are encoding
    * @param object the instance that we wish to encode
    * @return a string that encodes the object, if the object is compatible with
-   *         the service method's declared return type
+   *         the service method's declared return type, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws IllegalArgumentException if the result is not assignable to the
    *           service method's return type
@@ -454,7 +512,9 @@ public final class RPC {
    * @param object the instance that we wish to encode
    * @param serializationPolicy determines the serialization policy to be used
    * @return a string that encodes the object, if the object is compatible with
-   *         the service method's declared return type
+   *         the service method's declared return type, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws IllegalArgumentException if the result is not assignable to the
    *           service method's return type
@@ -519,7 +579,9 @@ public final class RPC {
    * @param serviceMethod the method to invoke
    * @param args arguments used for the method invocation
    * @return a string which encodes either the method's return or a checked
-   *         exception thrown by the method
+   *         exception thrown by the method, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws SecurityException if the method cannot be accessed or if the number
    *           or type of actual and formal arguments differ
@@ -555,7 +617,9 @@ public final class RPC {
    * @param args arguments used for the method invocation
    * @param serializationPolicy determines the serialization policy to be used
    * @return a string which encodes either the method's return or a checked
-   *         exception thrown by the method
+   *         exception thrown by the method, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * 
    * @throws NullPointerException if the serviceMethod or the
    *           serializationPolicy are <code>null</code>
@@ -608,7 +672,7 @@ public final class RPC {
     return responsePayload;
   }
 
-  private static int getRpcVersion() throws SerializationException {
+  static int getRpcVersion() throws SerializationException {
     int version =
         Integer.getInteger("gwt.rpc.version",
             AbstractSerializationStream.SERIALIZATION_STREAM_VERSION);
@@ -629,23 +693,69 @@ public final class RPC {
    * @param wasThrown if true, the object being returned was an exception thrown
    *          by the service method; if false, it was the result of the service
    *          method's invocation
-   * @return a string that encodes the response from a service method
+   * @return a string that encodes the response from a service method, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * @throws SerializationException if the object cannot be serialized
    */
   private static String encodeResponse(Class<?> responseClass, Object object, boolean wasThrown,
       int flags, SerializationPolicy serializationPolicy) throws SerializationException {
-
-    ServerSerializationStreamWriter stream =
-        new ServerSerializationStreamWriter(serializationPolicy, getRpcVersion());
-    stream.setFlags(flags);
-
-    stream.prepareToWrite();
-    if (responseClass != void.class) {
-      stream.serializeValue(object, responseClass);
+    final TeeWriter<StringWriter> responseWriter = getResponseWriter();
+    try {
+      // for test backward compatibility: if no response writer is set, this method has been
+      // reached on a non-standard call path and will respond with the serialized payload string
+      final TeeWriter<StringWriter> writer;
+      if (responseWriter == null) {
+          writer = new TeeWriter<>(new StringWriter(), new StringWriter());
+          setResponseWriter(writer);
+      } else {
+        writer = responseWriter;
+      }
+      try {
+        writer.append("//");
+        if (wasThrown) {
+          writer.append("EX");
+        } else {
+          writer.append("OK");
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      ServerSerializationStreamWriter stream =
+          new ServerSerializationStreamWriter(serializationPolicy, getRpcVersion(), writer);
+      stream.setFlags(flags);
+  
+      stream.prepareToWrite();
+      if (responseClass != void.class) {
+        stream.serializeValue(object, responseClass);
+      }
+      try {
+        stream.writeStringTableAndHeaderAfterPayloadFinished();
+        finishResponse();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      final String result;
+      StringWriter stringWriter = writer.getOtherWriter();
+      if (stringWriter != null) {
+        result = stringWriter.toString();
+      } else {
+        result = null;
+      }
+      return result;
+    } finally {
+      if (responseWriter == null) {
+        unsetResponseWriter();
+      }
     }
+  }
 
-    String bufferStr = (wasThrown ? "//EX" : "//OK") + stream.toString();
-    return bufferStr;
+  public static void finishResponse() throws IOException {
+    // Finish the response.
+    //
+    final TeeWriter<StringWriter> writer = getResponseWriter();
+    writer.flush();
+    writer.close();
   }
 
   private static String formatIllegalAccessErrorMessage(Object target, Method serviceMethod) {

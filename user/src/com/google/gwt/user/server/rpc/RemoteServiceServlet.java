@@ -25,6 +25,9 @@ import com.google.gwt.user.client.rpc.SerializationException;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
@@ -294,14 +297,16 @@ public class RemoteServiceServlet extends AbstractRemoteServiceServlet
    * This is public so that it can be unit tested easily without HTTP.
    *
    * @param payload the UTF-8 request payload
-   * @return a string which encodes either the method's return, a checked
-   *         exception thrown by the method, or an
-   *         {@link IncompatibleRemoteServiceException}
+   * @return a string which encodes either the method's return or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * @throws SerializationException if we cannot serialize the response
    * @throws UnexpectedException if the invocation throws a checked exception
    *           that is not declared in the service method's signature
    * @throws RuntimeException if the service method throws an unchecked
    *           exception (the exception will be the one thrown by the service)
+   * @throws IncompatibleRemoteServiceException when an incompatibility is detected between a
+   *           {@link RemoteService} client and its corresponding {@link RemoteService} server
    */
   public String processCall(String payload) throws SerializationException {
     // First, check for possible XSRF situation
@@ -336,7 +341,9 @@ public class RemoteServiceServlet extends AbstractRemoteServiceServlet
    * @param rpcRequest the already decoded RPC request
    * @return a string which encodes either the method's return, a checked
    *         exception thrown by the method, or an
-   *         {@link IncompatibleRemoteServiceException}
+   *         {@link IncompatibleRemoteServiceException}, or {@code null} if a protocol version of
+   *         {@link AbstractSerializationStream#SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION} or
+   *         newer has been selected
    * @throws SerializationException if we cannot serialize the response
    * @throws UnexpectedException if the invocation throws a checked exception
    *           that is not declared in the service method's signature
@@ -382,19 +389,57 @@ public class RemoteServiceServlet extends AbstractRemoteServiceServlet
     // Let subclasses see the serialized request.
     //
     onBeforeRequestDeserialized(requestPayload);
-
-    // Invoke the core dispatching logic, which returns the serialized
-    // result.
+    
+    // Create Writer on response, considering GZIP compression if requested
     //
-    String responsePayload = processCall(requestPayload);
+    final Writer responseWriter = createWriterForResponse(request, response);
+    final boolean onAfterResponseSerializedOverridden = isOnAfterResponseSerializedOverridden();
+    final StringWriter writerForResponseCopy;
+    if (onAfterResponseSerializedOverridden) {
+      writerForResponseCopy = new StringWriter();
+    } else {
+      writerForResponseCopy = null;
+    }
+    final TeeWriter<StringWriter> writer = new TeeWriter<>(responseWriter, writerForResponseCopy);
+    RPC.setResponseWriter(writer);
+    try {
+      // Invoke the core dispatching logic, which returns the serialized
+      // result.
+      //
+      String responsePayload = processCall(requestPayload);
+      
+      if (onAfterResponseSerializedOverridden) {
+        // Let subclasses see the serialized response.
+        // For the old protocol version it was already assembled
+        // and returned by processCall(requestPayload). For protocol
+        // versions starting with AbstractSerializationStream.SERIALIZATION_STREAM_FORWARD_STREAMING_VERSION
+        // null is returned by processCall(requestPayload), and the
+        // payload is obtained from the StringWriter
+        onAfterResponseSerialized(responsePayload != null ? responsePayload : writerForResponseCopy.toString());
+      }
+    } finally {
+      RPC.unsetResponseWriter();
+    }
+  }
 
-    // Let subclasses see the serialized response.
-    //
-    onAfterResponseSerialized(responsePayload);
-
-    // Write the response.
-    //
-    writeResponse(request, response, responsePayload);
+  private boolean isOnAfterResponseSerializedOverridden() {
+    try {
+      Class<?> c = getClass();
+      boolean foundOverride = false;
+      while (!foundOverride && c != RemoteServiceServlet.class) {
+        try {
+          final Method m = c.getDeclaredMethod("onAfterResponseSerialized", new Class<?>[] { String.class });
+          foundOverride = m != null;
+          // no need to check visibility because an override must be at least protected or public
+        } catch (NoSuchMethodException e) {
+          // ignore; the method wasn't found in the class referenced by c
+        }
+        c = c.getSuperclass();
+      }
+      return foundOverride;
+    } catch (SecurityException e) {
+      throw new RuntimeException("Couldn't find onAfterResponseSerialized method", e);
+    }
   }
 
   /**
@@ -500,27 +545,6 @@ public class RemoteServiceServlet extends AbstractRemoteServiceServlet
   protected void onBeforeRequestDeserialized(String serializedRequest) {
   }
 
-  /**
-   * Determines whether the response to a given servlet request should or should
-   * not be GZIP compressed. This method is only called in cases where the
-   * requester accepts GZIP encoding.
-   * <p>
-   * This implementation currently returns <code>true</code> if the response
-   * string's estimated byte length is longer than 256 bytes. Subclasses can
-   * override this logic.
-   * </p>
-   * 
-   * @param request the request being served
-   * @param response the response that will be written into
-   * @param responsePayload the payload that is about to be sent to the client
-   * @return <code>true</code> if responsePayload should be GZIP compressed,
-   *         otherwise <code>false</code>.
-   */
-  protected boolean shouldCompressResponse(HttpServletRequest request,
-      HttpServletResponse response, String responsePayload) {
-    return RPCServletUtils.exceedsUncompressedContentLengthLimit(responsePayload);
-  }
-
   private SerializationPolicy getCachedSerializationPolicy(
       String moduleBaseURL, String strongName) {
     synchronized (serializationPolicyCache) {
@@ -536,12 +560,9 @@ public class RemoteServiceServlet extends AbstractRemoteServiceServlet
     }
   }
 
-  private void writeResponse(HttpServletRequest request,
-      HttpServletResponse response, String responsePayload) throws IOException {
-    boolean gzipEncode = RPCServletUtils.acceptsGzipEncoding(request)
-        && shouldCompressResponse(request, response, responsePayload);
-
-    RPCServletUtils.writeResponse(getServletContext(), response,
-        responsePayload, gzipEncode);
+  private Writer createWriterForResponse(HttpServletRequest request,
+      HttpServletResponse response) throws IOException {
+    boolean clientAcceptsGzipEncoding = RPCServletUtils.acceptsGzipEncoding(request);
+    return RPCServletUtils.createWriterForResponse(getServletContext(), response, clientAcceptsGzipEncoding);
   }
 }

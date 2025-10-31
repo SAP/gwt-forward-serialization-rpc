@@ -8,7 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java-version: ['11', '17', '21', '22']
+        java-version: [ '11' ] # '17', '21', '22' ]
+        java-distribution: [ 'temurin' ] #, 'sapmachine' ]
+        #include:
+        #  - java-version: 8
+        #    java-distribution: temurin
     steps:
       - name: Checkout GWT itself into one directory
         uses: actions/checkout@v4
@@ -26,7 +30,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
+          distribution: ${{ matrix.java-distribution }}
+          java-package: jdk
       - name: Set up reviewdog for easier checks on the PR's checkstyle output
         uses: reviewdog/action-setup@v1
         with:
@@ -61,6 +66,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ matrix.java-version == '21' }}
         with:
-          name: checkstyle-reports-java${{ matrix.java-version }}
+          name: checkstyle-reports-java-${{ matrix.java-version }}-${{ matrix.java-distribution }}
           path: 'gwt/build/out/**/checkstyle*.xml'
           retention-days: 5

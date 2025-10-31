@@ -344,7 +344,7 @@ public class RPCServletUtils {
       // Compress the reply and adjust headers if the payload exceeds UNCOMPRESSED_BYTE_SIZE_LIMIT
       //
       final LazyGzipCompressingOutputStream lazyCompressingOutputStream = new LazyGzipCompressingOutputStream(response, UNCOMPRESSED_BYTE_SIZE_LIMIT);
-      writer = new OutputStreamWriter(lazyCompressingOutputStream, CHARSET_UTF8);
+      writer = new OutputStreamWriter(lazyCompressingOutputStream, StandardCharsets.UTF_8);
     } else {
       writer = new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8);
     }

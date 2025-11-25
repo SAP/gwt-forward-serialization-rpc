@@ -1151,7 +1151,7 @@ public class SerializableTypeOracleBuilder {
               .hasInstantiableSubtypes();
           allSucceeded &= fieldTypeHasInstantiableSubtypes;
           if (!fieldTypeHasInstantiableSubtypes) {
-            fieldLogger.log(TreeLogger.DEBUG, "Field's type "
+            fieldLogger.log(TreeLogger.WARN, "Field's type "
                 + fieldType.getQualifiedSourceName()
                 + " has no instantiable subtypes");
           }

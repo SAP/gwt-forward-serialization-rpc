@@ -56,7 +56,7 @@ jobs:
           export \
             TZ=America/Los_Angeles \
             ANT_OPTS='-Dfile.encoding=UTF8 -Xmx2g' \
-            GWT_VERSION=2.12.2
+            GWT_VERSION=2.12.4
           # Run the ant tasks, disabling watchFileChanges to work around a github actions limitation
           ant clean test dist doc \
             -Dgwt.version=${GWT_VERSION} \

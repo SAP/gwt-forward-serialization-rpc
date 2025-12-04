@@ -40,15 +40,14 @@ import com.google.gwt.dev.util.JsniRef;
 import com.google.gwt.dev.util.Name;
 import com.google.gwt.dev.util.Name.InternalName;
 import com.google.gwt.dev.util.Name.SourceOrBinaryName;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.collect.Lists;
 import com.google.gwt.dev.util.log.speedtracer.DevModeEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableMap;
 import com.google.gwt.thirdparty.guava.common.collect.MapMaker;
+import com.google.gwt.thirdparty.guava.common.io.Closeables;
 import com.google.gwt.thirdparty.guava.common.primitives.Primitives;
-import com.google.gwt.util.tools.Utility;
 
 import java.beans.Beans;
 import java.io.File;
@@ -366,7 +365,12 @@ public final class CompilingClassLoader extends ClassLoader implements
       if (url == null) {
         throw new ClassNotFoundException();
       }
-      byte[] bytes = Util.readURLAsBytes(url);
+      byte[] bytes;
+      try (InputStream inputStream = url.openStream()) {
+        bytes = inputStream.readAllBytes();
+      } catch (IOException ex) {
+        throw new ClassNotFoundException("Could not read class " + name, ex);
+      }
       return defineClass(name, bytes, 0, bytes.length);
     }
 
@@ -893,7 +897,7 @@ public final class CompilingClassLoader extends ClassLoader implements
       }
       return classBytes;
     } finally {
-      Utility.close(is);
+      Closeables.closeQuietly(is);
     }
   }
 

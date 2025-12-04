@@ -12,7 +12,7 @@ on:
       - 'release/*'
       - '*-test'
       - 'issue-7987-compatibility-with-issue-9584'
-      - 'issue-7987-gwt-2.12.2'
+      - 'issue-7987-gwt-2.12.4'
   workflow_dispatch:
     # Allow running manually
   pull_request:
@@ -31,11 +31,11 @@ jobs:
         java-distribution: [ 'temurin' ] #, 'sapmachine' ]
     steps:
       - name: Checkout GWT itself into one directory
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: 'gwt'
       - name: Checkout GWT tools into a sibling directory
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: 'gwtproject/tools'
           path: 'tools'
@@ -134,7 +134,7 @@ jobs:
         run: |
           set -eux
           # Set the version to deploy (it was also set in the build step above)
-          export GWT_VERSION=2.12.2
+          export GWT_VERSION=2.12.4
           export GWT_MAVEN_REPO_URL=https://central.sonatype.com/repository/maven-snapshots/
           export GWT_MAVEN_REPO_ID=sonatype-snapshots
           cd gwt

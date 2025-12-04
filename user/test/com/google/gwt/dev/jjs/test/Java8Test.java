@@ -40,6 +40,7 @@ import jsinterop.annotations.JsType;
  * Tests Java 8 features.
  */
 @DoNotRunWith(Platform.Devel)
+@SuppressWarnings("checkstyle:LeftCurly") // allow compact methods
 public class Java8Test extends GWTTestCase {
   int local = 42;
 
@@ -90,33 +91,27 @@ public class Java8Test extends GWTTestCase {
 
   interface DefaultInterface {
     void method1();
-    // CHECKSTYLE_OFF
-    default int method2() { return 42; }
+     default int method2() { return 42; }
     default int redeclaredAsAbstract() {
       return 88;
     }
     default Integer addInts(int x, int y) { return x + y; }
     default String print() { return "DefaultInterface"; }
-    // CHECKSTYLE_ON
   }
 
   interface DefaultInterface2 {
     void method3();
-    // CHECKSTYLE_OFF
     default int method4() { return 23; }
     default int redeclaredAsAbstract() {
       return 77;
     }
-    // CHECKSTYLE_ON
   }
 
   interface DefaultInterfaceSubType extends DefaultInterface {
-    // CHECKSTYLE_OFF
     default int method2() { return 43; }
     default String print() {
       return "DefaultInterfaceSubType " + DefaultInterface.super.print();
     }
-    // CHECKSTYLE_ON
   }
 
   static abstract class DualImplementorSuper implements DefaultInterface {
@@ -205,9 +200,9 @@ public class Java8Test extends GWTTestCase {
           implements DefaultInterfaceSubType {
     public void method1() {
     }
-    // CHECKSTYLE_OFF
-    public String print() { return "DefaultInterfaceImplVirtualUpRefTwoInterfaces"; }
-    // CHECKSTYLE_ON
+    public String print() {
+      return "DefaultInterfaceImplVirtualUpRefTwoInterfaces";
+    }
   }
 
   @Override
@@ -250,6 +245,39 @@ public class Java8Test extends GWTTestCase {
       }
     }.run(a,b);
     assertEquals(82, new AcceptsLambda<Integer>().accept(l).intValue());
+  }
+
+  class CtorAcceptsLambda {
+    CtorAcceptsLambda() {
+      this(() -> local = -1);
+    }
+    CtorAcceptsLambda(Runnable lambda) {
+      lambda.run();
+    }
+  }
+
+  public void testCompileLambdaOuterFieldCaptureInConstructor() {
+    assertEquals(42, local);
+    new CtorAcceptsLambda();
+    assertEquals(-1, local);
+  }
+
+  abstract class AbstractCtorAcceptsLambda {
+    AbstractCtorAcceptsLambda(Runnable lambda) {
+      lambda.run();
+    }
+  }
+
+  class CtorAcceptsLambdaSubtype extends AbstractCtorAcceptsLambda {
+    CtorAcceptsLambdaSubtype() {
+      super(() -> local = -1);
+    }
+  }
+
+  public void testCompileLambdaOuterFieldCaptureInConstructorSuper() throws Exception {
+    assertEquals(42, local);
+    new CtorAcceptsLambdaSubtype();
+    assertEquals(-1, local);
   }
 
   public void testCompileLambdaCaptureOuterInnerField() throws Exception {
@@ -510,10 +538,8 @@ public class Java8Test extends GWTTestCase {
   }
 
   interface InterfaceWithTwoDefenderMethods {
-    // CHECKSTYLE_OFF
     default String foo() { return "interface.foo"; }
     default String bar() { return this.foo() + " " + foo(); }
-    // CHECKSTYLE_ON
   }
 
   class ClassImplementOneDefenderMethod implements InterfaceWithTwoDefenderMethods {
@@ -532,9 +558,7 @@ public class Java8Test extends GWTTestCase {
   }
 
   interface InterfaceImplementOneDefenderMethod extends InterfaceWithTwoDefenderMethods {
-    // CHECKSTYLE_OFF
     default String foo() { return "interface1.foo"; }
-    // CHECKSTYLE_ON
   }
 
   interface InterfaceImplementZeroDefenderMethod extends InterfaceWithTwoDefenderMethods {
@@ -569,14 +593,10 @@ public class Java8Test extends GWTTestCase {
   }
 
   interface InterfaceI {
-    // CHECKSTYLE_OFF
     default String print() { return "interface1"; }
-    // CHECKSTYLE_ON
   }
   interface InterfaceII {
-    // CHECKSTYLE_OFF
     default String print() { return "interface2"; }
-    // CHECKSTYLE_ON
   }
   class ClassI {
     public String print() {
@@ -595,16 +615,12 @@ public class Java8Test extends GWTTestCase {
   }
 
   interface II {
-    // CHECKSTYLE_OFF
     default String fun() { return "fun() in i: " + this.foo(); };
     default String foo() { return "foo() in i.\n"; };
-    // CHECKSTYLE_ON
   }
   interface JJ extends II {
-    // CHECKSTYLE_OFF
     default String fun() { return "fun() in j: " + this.foo() + II.super.fun(); };
     default String foo() { return "foo() in j.\n"; }
-    // CHECKSTYLE_ON
   }
   class AA {
     public String fun() {
@@ -661,14 +677,12 @@ public class Java8Test extends GWTTestCase {
   }
 
   interface OuterInterface {
-    // CHECKSTYLE_OFF
     default String m() {
       return "I.m;" + new InnerClass().n();
     }
     default String n() {
       return "I.n;" + this.m();
     }
-    // CHECKSTYLE_ON
     class InnerClass {
       public String n() {
         return "A.n;" + m();

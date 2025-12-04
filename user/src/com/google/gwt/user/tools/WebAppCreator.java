@@ -20,18 +20,21 @@ import com.google.gwt.dev.ArgProcessorBase;
 import com.google.gwt.dev.Compiler;
 import com.google.gwt.dev.DevMode;
 import com.google.gwt.dev.GwtVersion;
-import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.collect.HashSet;
+import com.google.gwt.thirdparty.guava.common.io.ByteStreams;
+import com.google.gwt.thirdparty.guava.common.io.CharStreams;
 import com.google.gwt.user.tools.util.ArgHandlerIgnore;
 import com.google.gwt.user.tools.util.ArgHandlerOverwrite;
 import com.google.gwt.util.tools.ArgHandlerExtra;
 import com.google.gwt.util.tools.ArgHandlerFlag;
 import com.google.gwt.util.tools.ArgHandlerOutDir;
 import com.google.gwt.util.tools.ArgHandlerString;
-import com.google.gwt.util.tools.Utility;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -509,7 +512,7 @@ public final class WebAppCreator {
       throws IOException, WebAppCreatorException {
     List<FileCreator> files = new ArrayList<FileCreator>();
 
-    Utility.getDirectory(outDir.getPath(), true);
+    CommandLineCreatorUtils.getDirectory(outDir.getPath(), true);
 
     for (String template : templates) {
       URL templateUrl = getTemplateRoot(template);
@@ -722,24 +725,27 @@ public final class WebAppCreator {
       if (url == null) {
         throw new WebAppCreatorException("Could not find " + fileCreator.sourceName);
       }
-      File file = Utility.createNormalFile(fileCreator.destDir,
+      File file = CommandLineCreatorUtils.createNormalFile(fileCreator.destDir,
           fileCreator.destName, overwrite, ignore);
       if (file == null) {
         continue;
       }
       if (fileCreator.isBinary) {
-        byte[] data = Util.readURLAsBytes(url);
-        Utility.writeTemplateBinaryFile(file, data);
+        try (FileOutputStream o = new FileOutputStream(file); InputStream i = url.openStream()) {
+          ByteStreams.copy(i, o);
+        }
       } else {
-        String data = Util.readURLAsString(url);
-        Utility.writeTemplateFile(file, data, replacements);
+        try (InputStream i = url.openStream()) {
+          String data = CharStreams.toString(new InputStreamReader(i));
+          CommandLineCreatorUtils.writeTemplateFile(file, data, replacements);
+        }
       }
     }
   }
 
   protected boolean run() {
     try {
-      doRun(Utility.getInstallPath());
+      doRun(CommandLineCreatorUtils.getInstallPath());
       return true;
     } catch (IOException e) {
       System.err.println(e.getClass().getName() + ": " + e.getMessage());
@@ -761,7 +767,7 @@ public final class WebAppCreator {
       String replacedName = replaceFileName(replacements, srcFile.getName());
       
       if (srcFile.isDirectory()) {
-        File newDirectory = Utility.getDirectory(destDirectory, replacedName, true);
+        File newDirectory = CommandLineCreatorUtils.getDirectory(destDirectory, replacedName, true);
         files.addAll(getTemplateFiles(replacements, srcFile, newDirectory, templateClassRoot
             + srcFile.getName() + "/"));
       } else if (srcFile.getName().endsWith("src")) {
@@ -810,7 +816,7 @@ public final class WebAppCreator {
         String relativeName = fullName.substring(templateDirName.length());
         String replacedName = replaceFileName(replacements, relativeName);
         if (entry.isDirectory()) {
-          Utility.getDirectory(destDirectory, replacedName, true);
+          CommandLineCreatorUtils.getDirectory(destDirectory, replacedName, true);
         } else if (fullName.endsWith("src")) {
           // remove the src suffix 
           String destName = replacedName.substring(0, replacedName.length() - 3);

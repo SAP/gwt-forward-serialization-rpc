@@ -125,6 +125,14 @@ public class Java17Test extends GWTTestCase {
     assertFalse(isGwtSourceLevel17());
   }
 
+  public void testCaseArrowLabelsVoidExpression() {
+    assertFalse(isGwtSourceLevel17());
+  }
+
+  public void testUnusedSwitchExprResult() {
+    assertFalse(isGwtSourceLevel17());
+  }
+
   private boolean isGwtSourceLevel17() {
     return JUnitShell.getCompilerOptions().getSourceLevel().compareTo(SourceLevel.JAVA17) >= 0;
   }

@@ -700,16 +700,7 @@ public class GenerateJavaScriptAST {
 
     @Override
     public JsNode transformExpressionStatement(JExpressionStatement statement) {
-      if (statement.getExpr() instanceof JSwitchExpression) {
-        if (statement.getExpr().getType() == JPrimitiveType.VOID) {
-          return transformSwitchStatement(new JSwitchStatement((JSwitchExpression)
-                  statement.getExpr()));
-        } else {
-          throw new IllegalStateException("top-level switch expr");
-        }
-      } else {
-        return transform(statement.getExpr()).makeStmt();
-      }
+      return transform(statement.getExpr()).makeStmt();
     }
 
     @Override
@@ -1962,10 +1953,10 @@ public class GenerateJavaScriptAST {
      * source loading and runs in the global scope (not inside of any function scope).
      */
     private void setupGwtOnLoad() {
-      /**
+      /*
        * <pre>
-       * var $entry = Impl.registerEntry();
-       * var gwtOnLoad = ModuleUtils.gwtOnLoad();
+       * var $entry = ModuleUtils.registerEntry();
+       * var gwtOnLoad = ModuleUtils.gwtOnLoad;
        * ModuleUtils.addInitFunctions(init1, init2,...)
        * </pre>
        */
@@ -1980,8 +1971,8 @@ public class GenerateJavaScriptAST {
       // var gwtOnLoad = ModuleUtils.gwtOnLoad;
       JsName gwtOnLoad = topScope.findExistingUnobfuscatableName("gwtOnLoad");
       JsVar varGwtOnLoad = new JsVar(sourceInfo, gwtOnLoad);
-      varGwtOnLoad.setInitExpr(createAssignment(gwtOnLoad.makeRef(sourceInfo),
-          getIndexedMethodJsName(RuntimeConstants.MODULE_UTILS_GWT_ON_LOAD).makeRef(sourceInfo)));
+      varGwtOnLoad.setInitExpr(
+          getIndexedMethodJsName(RuntimeConstants.MODULE_UTILS_GWT_ON_LOAD).makeRef(sourceInfo));
       getGlobalStatements().add(new JsVars(sourceInfo, varGwtOnLoad));
 
       // ModuleUtils.addInitFunctions(init1, init2,...)

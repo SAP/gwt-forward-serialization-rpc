@@ -13,7 +13,8 @@
  */
 package com.google.gwt.dev.util;
 
-import com.google.gwt.util.tools.Utility;
+import com.google.gwt.thirdparty.guava.common.io.MoreFiles;
+import com.google.gwt.thirdparty.guava.common.io.RecursiveDeleteOption;
 
 import junit.framework.TestCase;
 
@@ -21,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 
 /**
  * Tests for {@link OutputFileSetOnDirectory}.
@@ -28,7 +30,7 @@ import java.io.OutputStream;
 public class OutputFileSetOnDirectoryTest extends TestCase {
 
   public void testCreateNewOutputStream() throws IOException {
-    File work = Utility.makeTemporaryDirectory(null, "outputfileset");
+    File work = Files.createTempDirectory("outputfileset").toFile();
     try {
 
       OutputFileSetOnDirectory output = new OutputFileSetOnDirectory(work, "test/");
@@ -44,12 +46,12 @@ public class OutputFileSetOnDirectoryTest extends TestCase {
       assertTrue(new File(work, "to/file").exists());
 
     } finally {
-      Util.recursiveDelete(work, false);
+      MoreFiles.deleteRecursively(work.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);
     }
   }
 
   public void testNewFileEqualTimestampOverwrites() throws IOException {
-    File work = Utility.makeTemporaryDirectory(null, "outputfileset");
+    File work = Files.createTempDirectory("outputfileset").toFile();
     try {
       OutputFileSetOnDirectory output = new OutputFileSetOnDirectory(work, "test/");
 
@@ -61,12 +63,12 @@ public class OutputFileSetOnDirectoryTest extends TestCase {
       assertTrue(secondStream instanceof FileOutputStream);
       secondStream.close();
     } finally {
-      Util.recursiveDelete(work, false);
+      MoreFiles.deleteRecursively(work.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);
     }
   }
 
   public void testNewFileOlderTimestampDies() throws IOException {
-    File work = Utility.makeTemporaryDirectory(null, "outputfileset");
+    File work = Files.createTempDirectory("outputfileset").toFile();
     try {
       OutputFileSetOnDirectory output = new OutputFileSetOnDirectory(work, "test/");
 
@@ -78,7 +80,7 @@ public class OutputFileSetOnDirectoryTest extends TestCase {
       assertFalse(secondStream instanceof FileOutputStream);
       secondStream.close();
     } finally {
-      Util.recursiveDelete(work, false);
+      MoreFiles.deleteRecursively(work.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);
     }
   }
 }

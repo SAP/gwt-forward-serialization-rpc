@@ -18,8 +18,10 @@
 ### This Fork
 
 This is a fork from https://github.com/gwtproject/gwt that has a branch ``issue-7987-compatibility-with-issue-9584``
-which has an implementation for [GWT Issue 7987](https://github.com/gwtproject/gwt/issues/7987) based on GWT 2.10
-and on branch ``issue-7987-gwt-2.12.2`` for GWT 2.12.2, which the GWT team decided not to pull.
+which has an implementation for [GWT Issue 7987](https://github.com/gwtproject/gwt/issues/7987) based on GWT 2.12
+and on branch ``issue-7987-gwt-2.12.4`` for GWT 2.12.4, which the GWT team decided not to pull. It has furthermore
+merged the ``issue-10181-clean`` branch that is the basis for pull request
+https://github.com/gwtproject/gwt/pull/10204.
 
 The key difference, when used with the ``-Dgwt.rpc.version=9`` system property for a GWT server application,
 is that serialization of GWT RPC responses is done by streaming the return value's serialized representation
